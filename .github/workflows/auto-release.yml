@@ -1,0 +1,197 @@
+name: Automatic Release on Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  create_release:
+    # Only runs if:
+    # 1. The PR was merged (not just closed)
+    # 2. Comes from release/* or hotfix/*
+    # 3. The target is main
+    if: |
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main  # Ensure we're on main
+
+      - name: Get latest version and determine new version
+        id: get_version_info
+        run: |
+          set -e  # Fail if any command fails
+
+          # Get latest version or use v0.0.0 as base for first release
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            LAST_VERSION=$(git describe --tags --abbrev=0)
+            echo "📌 Last version: $LAST_VERSION"
+          else
+            LAST_VERSION="v0.0.0"
+            echo "⚠️  No tags found. Using $LAST_VERSION as base for first release."
+          fi
+
+          # Extract version numbers (e.g., '0.0.0')
+          VERSION_NUMBERS=$(echo "$LAST_VERSION" | sed 's/^v//')
+
+          # Split into Major, Minor, Patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NUMBERS"
+
+          # Get source branch name
+          BRANCH_NAME="${{ github.head_ref }}"
+          echo "🌿 Source branch: $BRANCH_NAME"
+
+          # Calculate new version based on branch type
+          if [[ "$BRANCH_NAME" == release/* ]]; then
+            # Release: increment minor, reset patch
+            NEW_MINOR=$((MINOR + 1))
+            NEW_PATCH=0
+            NEW_VERSION="${MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+            RELEASE_TYPE="Release"
+
+            # Extract clean branch name
+            RELEASE_NAME=$(echo "${BRANCH_NAME}" | sed -E 's/^release\///' | tr '-' ' ')
+
+          elif [[ "$BRANCH_NAME" == hotfix/* ]]; then
+            # Hotfix: only increment patch
+            NEW_PATCH=$((PATCH + 1))
+            NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+            RELEASE_TYPE="Hotfix"
+
+            # Extract clean branch name
+            RELEASE_NAME=$(echo "${BRANCH_NAME}" | sed -E 's/^hotfix\///' | tr '-' ' ')
+          fi
+
+          echo "✅ New version: v${NEW_VERSION}"
+          echo "📝 Type: $RELEASE_TYPE"
+          echo "🏷️  Name: $RELEASE_NAME"
+
+          # Generate changelog from last tag
+          echo "📋 Generating changelog..."
+          if [ "$LAST_VERSION" != "v0.0.0" ]; then
+            CHANGELOG=$(git log ${LAST_VERSION}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            # First release: get all commits
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Create release body
+          RELEASE_BODY="## ${RELEASE_TYPE} v${NEW_VERSION}
+
+          **Merged from:** \`${BRANCH_NAME}\`
+          **Date:** $(date +'%Y-%m-%d %H:%M:%S UTC')
+
+          ### Changes
+
+          ${CHANGELOG}
+
+          ---
+          *This release was automatically generated from the merge of \`${BRANCH_NAME}\` into \`main\`.*"
+
+          # Save outputs
+          echo "tag_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "release_name=v${NEW_VERSION} - ${RELEASE_NAME^}" >> $GITHUB_OUTPUT
+
+          # Save body to file to avoid multiline issues
+          echo "$RELEASE_BODY" > release_body.txt
+          echo "body_file=release_body.txt" >> $GITHUB_OUTPUT
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version_info.outputs.tag_name }}
+          name: ${{ steps.get_version_info.outputs.release_name }}
+          body_path: ${{ steps.get_version_info.outputs.body_file }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true  # GitHub will generate additional notes
+
+      - name: Create backport branch and PR to develop
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          BRANCH_NAME="${{ steps.get_version_info.outputs.branch_name }}"
+          TAG_NAME="${{ steps.get_version_info.outputs.tag_name }}"
+          BACKPORT_BRANCH="backport/${TAG_NAME}"
+
+          echo "🔄 Creating backport branch ${BACKPORT_BRANCH}..."
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create backport branch from main (which already has the merge)
+          git checkout main
+          git pull origin main
+          git checkout -b ${BACKPORT_BRANCH}
+
+          # Push backport branch
+          git push origin ${BACKPORT_BRANCH}
+
+          echo "✅ Backport branch created: ${BACKPORT_BRANCH}"
+
+          # Create Pull Request to develop
+          echo "📝 Creating PR to develop..."
+
+          PR_TITLE="🔄 Backport ${TAG_NAME} to develop"
+          PR_BODY="## Backport Release ${TAG_NAME}
+
+          This PR backports the changes from \`${BRANCH_NAME}\` (now in \`main\`) back to \`develop\`.
+
+          ### What's included
+          - All changes from release ${TAG_NAME}
+          - Tag: ${TAG_NAME}
+          - Original branch: \`${BRANCH_NAME}\`
+
+          ### ⚠️ Action Required
+          - Review the changes
+          - Resolve any conflicts if present
+          - Merge this PR to keep \`develop\` in sync with \`main\`
+
+          ---
+          *This PR was automatically created after merging \`${BRANCH_NAME}\` to \`main\`.*"
+
+          # Create PR using GitHub CLI
+          gh pr create \
+            --title "${PR_TITLE}" \
+            --body "${PR_BODY}" \
+            --base develop \
+            --head ${BACKPORT_BRANCH} \
+            --label "backport" \
+            --label "automated" \
+            || echo "⚠️  PR creation failed. May need to create manually."
+
+          echo "✅ PR created successfully"
+
+      - name: Delete merged branch
+        if: success()
+        run: |
+          BRANCH_NAME="${{ steps.get_version_info.outputs.branch_name }}"
+
+          echo "🗑️  Deleting remote branch ${BRANCH_NAME}..."
+          git push origin --delete ${BRANCH_NAME} || echo "Branch already deleted or doesn't exist remotely"
+
+          echo "✅ Cleanup complete"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Release creation failed!"
+          echo "Please check the logs and create the release manually."
+          exit 1
