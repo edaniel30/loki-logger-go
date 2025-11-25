@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"loki-logger-go"
-	"loki-logger-go/models"
+	"github.com/edaniel30/loki-logger-go"
+	"github.com/edaniel30/loki-logger-go/models"
 	"time"
 
 	"github.com/gin-gonic/gin"

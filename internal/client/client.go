@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"loki-logger-go/internal/pool"
+	"github.com/edaniel30/loki-logger-go/internal/pool"
 	"net/http"
 	"strconv"
 	"time"

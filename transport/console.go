@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"loki-logger-go/formatter"
+	"github.com/edaniel30/loki-logger-go/formatter"
 	"os"
 	"sync"
 )
