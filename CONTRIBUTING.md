@@ -5,6 +5,11 @@ First off, thank you for considering contributing to Loki Logger Go! It's people
 ## Table of Contents
 
 - [Getting Started](#getting-started)
+- [Branch Workflow](#branch-workflow)
+  - [Main Branches](#main-branches)
+  - [Supporting Branches](#supporting-branches)
+  - [Workflow Steps](#workflow-steps)
+  - [Important Rules](#important-rules)
 - [How Can I Contribute?](#how-can-i-contribute)
   - [Reporting Bugs](#reporting-bugs)
   - [Suggesting Enhancements](#suggesting-enhancements)
@@ -16,6 +21,7 @@ First off, thank you for considering contributing to Loki Logger Go! It's people
   - [Documentation](#documentation)
 - [Testing](#testing)
 - [Project Structure](#project-structure)
+- [Release Process](#release-process)
 
 ## Getting Started
 
@@ -29,10 +35,110 @@ First off, thank you for considering contributing to Loki Logger Go! It's people
    ```bash
    go mod download
    ```
-4. **Create a branch** for your changes:
+4. **Checkout develop branch**:
+   ```bash
+   git checkout develop
+   git pull origin develop
+   ```
+5. **Create a feature branch** from develop:
    ```bash
    git checkout -b feature/my-new-feature
    ```
+
+## Branch Workflow
+
+This project follows a **Git Flow** branching strategy:
+
+### Main Branches
+
+- **`main`** - Production-ready code. Only release branches are merged here.
+- **`develop`** - Integration branch for features. All feature development happens here.
+
+### Supporting Branches
+
+- **`feature/*`** - New features or enhancements
+- **`release/*`** - Release preparation
+- **`hotfix/*`** - Emergency fixes for production
+
+### Workflow Steps
+
+1. **Feature Development**:
+   ```bash
+   # Create feature branch from develop
+   git checkout develop
+   git checkout -b feature/add-new-transport
+
+   # Work on your feature
+   git add .
+   git commit -m "feat(transport): add new transport implementation"
+
+   # Push to your fork
+   git push origin feature/add-new-transport
+
+   # Create Pull Request to develop branch
+   ```
+
+2. **Merging Features**:
+   - All features are merged into `develop` via Pull Request
+   - Requires code review and passing tests
+   - Never merge directly to `main`
+
+3. **Release Process** (Maintainers only):
+   ```bash
+   # Create release branch from develop
+   git checkout develop
+   git checkout -b release/v1.2.0
+
+   # Finalize version, update docs
+   git commit -m "chore: prepare release v1.2.0"
+
+   # Merge to main (create PR and merge)
+   git checkout main
+   git merge release/v1.2.0
+   git tag v1.2.0
+   git push origin main --tags
+
+   # ✨ GitHub Actions automáticamente:
+   # - Crea rama backport/v1.2.0
+   # - Crea PR: backport/v1.2.0 → develop
+   # - Elimina la rama release/v1.2.0
+
+   # ⚠️ MANUAL: Revisar y mergear el PR de backport a develop
+   # Ve a GitHub → Pull Requests → "🔄 Backport v1.2.0 to develop"
+   # Resuelve conflictos si hay, y merge
+   ```
+
+4. **Hotfix Process** (Maintainers only):
+   ```bash
+   # Create hotfix from main
+   git checkout main
+   git checkout -b hotfix/critical-bug
+
+   # Fix the bug
+   git commit -m "fix: critical bug in logger"
+
+   # Merge to main (create PR and merge)
+   git checkout main
+   git merge hotfix/critical-bug
+   git tag v1.2.1
+   git push origin main --tags
+
+   # ✨ GitHub Actions automáticamente:
+   # - Crea rama backport/v1.2.1
+   # - Crea PR: backport/v1.2.1 → develop
+   # - Elimina la rama hotfix/critical-bug
+
+   # ⚠️ MANUAL: Revisar y mergear el PR de backport a develop
+   ```
+
+### Important Rules
+
+- ✅ **Always** create feature branches from `develop`
+- ✅ **Always** target Pull Requests to `develop` (not main)
+- ✅ Only maintainers create `release/*` and `hotfix/*` branches
+- ✅ Only maintainers merge to `main`
+- ❌ **Never** commit directly to `main` or `develop`
+- ❌ **Never** merge feature branches to `main` directly
 
 ## How Can I Contribute?
 
@@ -85,11 +191,14 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ### Pull Requests
 
-1. **Follow the style guidelines** (see below)
-2. **Write tests** for your changes
-3. **Update documentation** if needed
-4. **Ensure all tests pass** before submitting
-5. **Reference relevant issues** in your PR description
+1. **Target the `develop` branch** - All PRs must be submitted to `develop`, not `main`
+2. **Follow the style guidelines** (see below)
+3. **Write tests** for your changes
+4. **Update documentation** if needed
+5. **Ensure all tests pass** before submitting
+6. **Reference relevant issues** in your PR description
+
+**Important**: Pull Requests to `main` will be rejected. Always create PRs against the `develop` branch.
 
 **Pull Request Template:**
 
@@ -295,11 +404,44 @@ including environment variable best practices.
 
 ## Release Process
 
-Releases are handled by maintainers:
+Releases are handled by maintainers following the Git Flow process:
 
-1. **Version bump** following [Semantic Versioning](https://semver.org/)
-2. **Create GitHub release** with release notes
-3. **Tag release** in git
+1. **Create release branch** from `develop`:
+   ```bash
+   git checkout develop
+   git checkout -b release/v1.x.x
+   ```
+
+2. **Finalize the release**:
+   - Update version numbers
+   - Final testing and bug fixes
+   - Update documentation if needed
+
+3. **Merge to `main` and tag**:
+   ```bash
+   git checkout main
+   git merge release/v1.x.x
+   git tag -a v1.x.x -m "Release v1.x.x"
+   git push origin main --tags
+   ```
+
+4. **Merge back to `develop`**:
+   ```bash
+   git checkout develop
+   git merge release/v1.x.x
+   git push origin develop
+   ```
+
+5. **Create GitHub release** with release notes
+
+6. **Delete release branch**:
+   ```bash
+   git branch -d release/v1.x.x
+   ```
+
+**Versioning**: Follow [Semantic Versioning](https://semver.org/) (MAJOR.MINOR.PATCH)
+
+For complete workflow details, see the [Branch Workflow](#branch-workflow) section.
 
 ## Questions?
 
