@@ -1,4 +1,4 @@
-module loki-logger-go
+module github.com/edaniel30/loki-logger-go
 
 go 1.25.0
 

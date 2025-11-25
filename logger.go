@@ -2,8 +2,8 @@ package loki
 
 import (
 	"context"
-	"loki-logger-go/models"
-	"loki-logger-go/transport"
+	"github.com/edaniel30/loki-logger-go/models"
+	"github.com/edaniel30/loki-logger-go/transport"
 	"sync"
 	"time"
 )
