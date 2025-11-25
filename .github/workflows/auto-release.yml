@@ -25,6 +25,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: main  # Ensure we're on main
+          token: ${{ secrets.TOKEN_FOR_RELEASES }}  # Use custom token for git operations
 
       - name: Get latest version and determine new version
         id: get_version_info
