@@ -1,7 +1,7 @@
 package models
 
 import (
-	"loki-logger-go/errors"
+	"github.com/edaniel30/loki-logger-go/errors"
 	"time"
 )
 

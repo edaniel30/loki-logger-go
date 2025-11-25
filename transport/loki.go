@@ -3,7 +3,7 @@ package transport
 import (
 	"context"
 	"fmt"
-	"loki-logger-go/internal/client"
+	"github.com/edaniel30/loki-logger-go/internal/client"
 	"sync"
 	"time"
 )
