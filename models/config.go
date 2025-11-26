@@ -1,8 +1,9 @@
 package models
 
 import (
-	"github.com/edaniel30/loki-logger-go/errors"
 	"time"
+
+	"github.com/edaniel30/loki-logger-go/errors"
 )
 
 // Config holds the configuration for a Logger instance.
