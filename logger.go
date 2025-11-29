@@ -2,8 +2,10 @@ package loki
 
 import (
 	"context"
+	"fmt"
 	"github.com/edaniel30/loki-logger-go/models"
 	"github.com/edaniel30/loki-logger-go/transport"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -84,6 +86,12 @@ func (l *Logger) Log(level models.Level, message string, fields ...models.Fields
 func (l *Logger) log(level models.Level, message string, fields ...models.Fields) {
 	if !level.IsEnabled(l.config.LogLevel) {
 		return
+	}
+
+	// Include stack trace automatically for error and fatal levels if configured
+	if l.config.IncludeStackTrace && (level == models.LevelError || level == models.LevelFatal) {
+		stack := string(debug.Stack())
+		message = fmt.Sprintf("%s\n\nStack trace:\n%s", message, stack)
 	}
 
 	mergedFields := make(models.Fields)
