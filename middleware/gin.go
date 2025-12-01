@@ -72,13 +72,14 @@ func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 
 		// Build fields
 		fields := models.Fields{
-			"method":     c.Request.Method,
-			"path":       path,
-			"query":      raw,
-			"status":     statusCode,
-			"latency_ms": latency.Milliseconds(),
-			"client_ip":  c.ClientIP(),
-			"user_agent": c.Request.UserAgent(),
+			"method":            c.Request.Method,
+			"path":              path,
+			"query":             raw,
+			"status":            statusCode,
+			"latency_ms":        latency.Milliseconds(),
+			"client_ip":         c.ClientIP(),
+			"user_agent":        c.Request.UserAgent(),
+			"_skip_stack_trace": true, // Skip stack trace for HTTP errors
 		}
 
 		// Add trace_id as field too (for log content)
@@ -115,10 +116,11 @@ func GinRecovery(logger *loki.Logger) gin.HandlerFunc {
 
 				// Build error fields
 				fields := models.Fields{
-					"error":     err,
-					"path":      c.Request.URL.Path,
-					"method":    c.Request.Method,
-					"client_ip": c.ClientIP(),
+					"error":             err,
+					"path":              c.Request.URL.Path,
+					"method":            c.Request.Method,
+					"client_ip":         c.ClientIP(),
+					"_skip_stack_trace": true, // Skip stack trace for HTTP panics
 				}
 
 				// Add trace_id as field too
@@ -205,13 +207,14 @@ func GinLoggerWithConfig(config GinLoggerConfig) gin.HandlerFunc {
 
 		// Build fields
 		fields := models.Fields{
-			"method":     c.Request.Method,
-			"path":       path,
-			"query":      raw,
-			"status":     statusCode,
-			"latency_ms": latency.Milliseconds(),
-			"client_ip":  c.ClientIP(),
-			"user_agent": c.Request.UserAgent(),
+			"method":            c.Request.Method,
+			"path":              path,
+			"query":             raw,
+			"status":            statusCode,
+			"latency_ms":        latency.Milliseconds(),
+			"client_ip":         c.ClientIP(),
+			"user_agent":        c.Request.UserAgent(),
+			"_skip_stack_trace": true, // Skip stack trace for HTTP errors
 		}
 
 		// Add trace_id as field too (for log content)
