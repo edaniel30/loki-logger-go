@@ -40,19 +40,23 @@ type Config struct {
 
 	// EnableConsole enables logging to console in addition to other transports
 	OnlyConsole bool
+
+	// IncludeStackTrace includes stack trace in error and fatal logs
+	IncludeStackTrace bool
 }
 
 func DefaultConfig() Config {
 	return Config{
-		AppName:       "app",
-		LokiHost:      "http://localhost:3100",
-		LogLevel:      LevelInfo,
-		Labels:        make(map[string]string),
-		BatchSize:     100,
-		FlushInterval: 5 * time.Second,
-		MaxRetries:    3,
-		Timeout:       10 * time.Second,
-		OnlyConsole:   true,
+		AppName:           "app",
+		LokiHost:          "http://localhost:3100",
+		LogLevel:          LevelInfo,
+		Labels:            make(map[string]string),
+		BatchSize:         100,
+		FlushInterval:     5 * time.Second,
+		MaxRetries:        3,
+		Timeout:           10 * time.Second,
+		OnlyConsole:       true,
+		IncludeStackTrace: true,
 	}
 }
 
@@ -121,6 +125,12 @@ func WithTimeout(timeout time.Duration) Option {
 func WithOnlyConsole(enabled bool) Option {
 	return func(c *Config) {
 		c.OnlyConsole = enabled
+	}
+}
+
+func WithIncludeStackTrace(enabled bool) Option {
+	return func(c *Config) {
+		c.IncludeStackTrace = enabled
 	}
 }
 

@@ -2,8 +2,10 @@ package loki
 
 import (
 	"context"
+	"fmt"
 	"github.com/edaniel30/loki-logger-go/models"
 	"github.com/edaniel30/loki-logger-go/transport"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -91,6 +93,19 @@ func (l *Logger) log(level models.Level, message string, fields ...models.Fields
 		for k, v := range f {
 			mergedFields[k] = v
 		}
+	}
+
+	// Check if stack trace should be skipped
+	skipStackTrace := false
+	if skip, ok := mergedFields["_skip_stack_trace"].(bool); ok && skip {
+		skipStackTrace = true
+		delete(mergedFields, "_skip_stack_trace") // Remove internal field
+	}
+
+	// Include stack trace automatically for error and fatal levels if configured
+	if !skipStackTrace && l.config.IncludeStackTrace && (level == models.LevelError || level == models.LevelFatal) {
+		stack := string(debug.Stack())
+		message = fmt.Sprintf("%s\n\nStack trace:\n%s", message, stack)
 	}
 
 	labels := make(map[string]string)
