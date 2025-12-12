@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"github.com/edaniel30/loki-logger-go/internal/pool"
+	"maps"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/edaniel30/loki-logger-go/internal/pool"
 )
 
 // Entry represents a single log record.
@@ -112,10 +114,8 @@ func (c *Client) formatLogLine(entry *Entry) (string, error) {
 	data["level"] = entry.Level
 	data["message"] = entry.Message
 
-	// Add all fields
-	for k, v := range entry.Fields {
-		data[k] = v
-	}
+	// Add all custom fields
+	maps.Copy(data, entry.Fields)
 
 	encoder := json.NewEncoder(buf)
 	if err := encoder.Encode(data); err != nil {

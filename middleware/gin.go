@@ -62,14 +62,6 @@ func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 			})
 		}
 
-		// Determine log level based on status code
-		logFunc := currentLogger.Info
-		if statusCode >= 500 {
-			logFunc = currentLogger.Error
-		} else if statusCode >= 400 {
-			logFunc = currentLogger.Warn
-		}
-
 		// Build fields
 		fields := models.Fields{
 			"method":            c.Request.Method,
@@ -92,8 +84,17 @@ func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 			fields["errors"] = c.Errors.String()
 		}
 
-		// Log the request
-		logFunc("HTTP Request", fields)
+		// Get request context
+		ctx := c.Request.Context()
+
+		// Determine log level based on status code and log
+		if statusCode >= 500 {
+			currentLogger.Error(ctx, "HTTP Request", fields)
+		} else if statusCode >= 400 {
+			currentLogger.Warn(ctx, "HTTP Request", fields)
+		} else {
+			currentLogger.Info(ctx, "HTTP Request", fields)
+		}
 	}
 }
 
@@ -128,7 +129,9 @@ func GinRecovery(logger *loki.Logger) gin.HandlerFunc {
 					fields["trace_id"] = traceID
 				}
 
-				currentLogger.Error("Panic recovered", fields)
+				// Get request context
+				ctx := c.Request.Context()
+				currentLogger.Error(ctx, "Panic recovered", fields)
 
 				// Abort with internal server error
 				c.AbortWithStatus(500)
@@ -197,14 +200,6 @@ func GinLoggerWithConfig(config GinLoggerConfig) gin.HandlerFunc {
 			})
 		}
 
-		// Determine log level based on status code
-		logFunc := currentLogger.Info
-		if statusCode >= 500 {
-			logFunc = currentLogger.Error
-		} else if statusCode >= 400 {
-			logFunc = currentLogger.Warn
-		}
-
 		// Build fields
 		fields := models.Fields{
 			"method":            c.Request.Method,
@@ -227,7 +222,16 @@ func GinLoggerWithConfig(config GinLoggerConfig) gin.HandlerFunc {
 			fields["errors"] = c.Errors.String()
 		}
 
-		// Log the request
-		logFunc("HTTP Request", fields)
+		// Get request context
+		ctx := c.Request.Context()
+
+		// Determine log level based on status code and log
+		if statusCode >= 500 {
+			currentLogger.Error(ctx, "HTTP Request", fields)
+		} else if statusCode >= 400 {
+			currentLogger.Warn(ctx, "HTTP Request", fields)
+		} else {
+			currentLogger.Info(ctx, "HTTP Request", fields)
+		}
 	}
 }
