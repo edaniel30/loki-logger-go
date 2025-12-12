@@ -11,14 +11,17 @@ import (
 // LokiTransport sends log entries to a Grafana Loki server.
 // It batches entries for efficiency and flushes periodically.
 type LokiTransport struct {
-	client        *client.Client
-	buffer        []*Entry
-	batchSize     int
-	flushInterval time.Duration
-	mu            sync.Mutex
-	stopCh        chan struct{}
-	flushCh       chan struct{}
-	wg            sync.WaitGroup
+	client          *client.Client
+	buffer          []*Entry
+	batchSize       int
+	flushInterval   time.Duration
+	flushTimeout    time.Duration
+	shutdownTimeout time.Duration
+	mu              sync.Mutex
+	stopCh          chan struct{}
+	flushCh         chan struct{}
+	doneCh          chan struct{} // signals when background flusher is done
+	wg              sync.WaitGroup
 }
 
 // LokiTransportConfig configures a LokiTransport instance.
@@ -43,17 +46,26 @@ type LokiTransportConfig struct {
 
 	// Timeout is the HTTP request timeout
 	Timeout time.Duration
+
+	// FlushTimeout is the timeout for flush operations
+	FlushTimeout time.Duration
+
+	// ShutdownTimeout is the timeout for graceful shutdown
+	ShutdownTimeout time.Duration
 }
 
 // NewLokiTransport creates a new Loki transport with the given configuration.
 func NewLokiTransport(config LokiTransportConfig) *LokiTransport {
 	lt := &LokiTransport{
-		client:        client.NewClient(config.LokiURL, config.LokiUsername, config.LokiPassword, config.Timeout, config.MaxRetries),
-		buffer:        make([]*Entry, 0, config.BatchSize),
-		batchSize:     config.BatchSize,
-		flushInterval: config.FlushInterval,
-		stopCh:        make(chan struct{}),
-		flushCh:       make(chan struct{}, 1),
+		client:          client.NewClient(config.LokiURL, config.LokiUsername, config.LokiPassword, config.Timeout, config.MaxRetries),
+		buffer:          make([]*Entry, 0, config.BatchSize),
+		batchSize:       config.BatchSize,
+		flushInterval:   config.FlushInterval,
+		flushTimeout:    config.FlushTimeout,
+		shutdownTimeout: config.ShutdownTimeout,
+		stopCh:          make(chan struct{}),
+		flushCh:         make(chan struct{}, 1),
+		doneCh:          make(chan struct{}),
 	}
 
 	// Start background flusher
@@ -61,6 +73,10 @@ func NewLokiTransport(config LokiTransportConfig) *LokiTransport {
 	go lt.backgroundFlusher()
 
 	return lt
+}
+
+func (lt *LokiTransport) Name() string {
+	return "loki"
 }
 
 // Write adds entries to the buffer and flushes if batch size is reached.
@@ -85,10 +101,10 @@ func (lt *LokiTransport) Flush(ctx context.Context) error {
 		return nil
 	}
 
-	// Copy buffer and reset
-	toSend := make([]*Entry, len(lt.buffer))
-	copy(toSend, lt.buffer)
-	lt.buffer = lt.buffer[:0]
+	// Take ownership of current buffer and allocate new one
+	// This avoids race conditions by not reusing the underlying array
+	toSend := lt.buffer
+	lt.buffer = make([]*Entry, 0, lt.batchSize)
 	lt.mu.Unlock()
 
 	// Convert transport.Entry to client.Entry
@@ -112,20 +128,30 @@ func (lt *LokiTransport) Flush(ctx context.Context) error {
 }
 
 // Close stops the background flusher and flushes remaining entries.
+// It waits up to the configured ShutdownTimeout for graceful shutdown.
+// If shutdown takes longer, it returns an error but the goroutine will continue to completion.
 func (lt *LokiTransport) Close() error {
+	// Signal shutdown
 	close(lt.stopCh)
-	lt.wg.Wait()
 
-	// Final flush
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Wait for background flusher to finish with timeout
+	shutdownTimer := time.NewTimer(lt.shutdownTimeout)
+	defer shutdownTimer.Stop()
 
-	return lt.Flush(ctx)
+	select {
+	case <-lt.doneCh:
+		// Clean shutdown completed
+		return nil
+	case <-shutdownTimer.C:
+		// Timeout waiting for shutdown
+		return fmt.Errorf("timeout waiting for background flusher to shutdown after %v", lt.shutdownTimeout)
+	}
 }
 
 // backgroundFlusher periodically flushes buffered entries.
 func (lt *LokiTransport) backgroundFlusher() {
 	defer lt.wg.Done()
+	defer close(lt.doneCh) // Signal completion when done
 
 	ticker := time.NewTicker(lt.flushInterval)
 	defer ticker.Stop()
@@ -133,16 +159,20 @@ func (lt *LokiTransport) backgroundFlusher() {
 	for {
 		select {
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), lt.flushTimeout)
 			_ = lt.Flush(ctx) // Ignore errors in background flush
 			cancel()
 
 		case <-lt.flushCh:
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), lt.flushTimeout)
 			_ = lt.Flush(ctx)
 			cancel()
 
 		case <-lt.stopCh:
+			// Perform final flush before exiting
+			ctx, cancel := context.WithTimeout(context.Background(), lt.flushTimeout)
+			_ = lt.Flush(ctx) // Ignore error - Close() will report timeout if needed
+			cancel()
 			return
 		}
 	}

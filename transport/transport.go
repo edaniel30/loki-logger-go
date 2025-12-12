@@ -18,6 +18,9 @@ type Entry struct {
 // Transport defines how log entries are sent to their destination.
 // Implementations must be thread-safe for concurrent use.
 type Transport interface {
+	// Name returns the name of this transport (e.g., "console", "loki")
+	Name() string
+
 	// Write sends one or more log entries to the transport destination.
 	// Returns an error if the write operation fails.
 	Write(ctx context.Context, entries ...*Entry) error
