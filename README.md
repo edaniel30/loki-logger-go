@@ -2,19 +2,6 @@
 
 A powerful, flexible, and easy-to-use logging library for Go, designed to integrate seamlessly with Grafana Loki.
 
-## Features
-
-- 🚀 **High Performance**: Uses buffer pooling and batching to minimize allocations and network calls
-- 📊 **Structured Logging**: Full support for structured fields and labels
-- 🎯 **Multiple Transports**: Send logs to Loki, console, or custom destinations
-- 🔄 **Auto-Batching**: Automatically batches logs for efficient network usage
-- ⚡ **Async Processing**: Background flushing with configurable intervals
-- 🛡️ **Thread-Safe**: Safe for concurrent use across goroutines
-- 🎨 **Colored Output**: Beautiful console output with color-coded log levels
-- 🔌 **Middleware Support**: Built-in middleware for Gin and other frameworks
-- ⚙️ **Highly Configurable**: Flexible configuration with functional options
-- 🔁 **Auto-Retry**: Automatic retry with exponential backoff for failed requests
-
 ## Installation
 
 ```bash
@@ -29,6 +16,7 @@ go get github.com/edaniel30/loki-logger-go
 package main
 
 import (
+    "context"
     "loki-logger-go"
 )
 
@@ -46,13 +34,15 @@ func main() {
     }
     defer logger.Close()
 
+    ctx := context.Background()
+
     // Log messages
-    logger.Info("Application started", loki.Fields{
+    logger.Info(ctx, "Application started", loki.Fields{
         "version": "1.0.0",
         "port":    8080,
     })
 
-    logger.Error("Failed to connect to database", loki.Fields{
+    logger.Error(ctx, "Failed to connect to database", loki.Fields{
         "error": "connection timeout",
         "host":  "localhost:5432",
     })
@@ -192,17 +182,21 @@ For complete distributed tracing setup across microservices, see [TRACING.md](./
 
 ```go
 type Config struct {
-    AppName       string              // Application name (required)
-    LokiHost      string              // Loki server URL
-    LokiUsername  string              // Loki username for basic auth (optional)
-    LokiPassword  string              // Loki password for basic auth (optional)
-    LogLevel      Level               // Minimum log level
-    Labels        map[string]string   // Default labels for all logs
-    BatchSize     int                 // Number of logs to batch
-    FlushInterval time.Duration       // How often to flush logs
-    MaxRetries    int                 // Max retry attempts
-    Timeout       time.Duration       // HTTP request timeout
-    EnableConsole bool                // Enable console output
+    AppName           string              // Application name (required)
+    LokiHost          string              // Loki server URL
+    LokiUsername      string              // Loki username for basic auth (optional)
+    LokiPassword      string              // Loki password for basic auth (optional)
+    LogLevel          Level               // Minimum log level
+    Labels            map[string]string   // Default labels for all logs
+    BatchSize         int                 // Number of logs to batch
+    FlushInterval     time.Duration       // How often to flush logs
+    MaxRetries        int                 // Max retry attempts
+    Timeout           time.Duration       // HTTP request timeout
+    WriteTimeout      time.Duration       // Individual log write timeout (default: 5s)
+    FlushTimeout      time.Duration       // Flush operation timeout (default: 10s)
+    ShutdownTimeout   time.Duration       // Graceful shutdown timeout (default: 10s)
+    OnlyConsole       bool                // Only log to console (disable Loki)
+    IncludeStackTrace bool                // Auto stack traces for errors (default: true)
 }
 ```
 
@@ -219,6 +213,61 @@ type Config struct {
 - `WithMaxRetries(retries int)` - Set max retry attempts
 - `WithTimeout(timeout time.Duration)` - Set HTTP timeout
 - `WithConsole(enabled bool)` - Enable/disable console output
+- `WithWriteTimeout(timeout time.Duration)` - Set timeout for individual log write operations (default: 5s)
+- `WithFlushTimeout(timeout time.Duration)` - Set timeout for flush operations (default: 10s)
+- `WithShutdownTimeout(timeout time.Duration)` - Set timeout for graceful shutdown (default: 10s)
+
+### Timeout Configuration
+
+The logger provides granular control over various timeout operations:
+
+```go
+logger, err := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    // Individual log write timeout
+    loki.WithWriteTimeout(5*time.Second),
+    // Flush operation timeout
+    loki.WithFlushTimeout(10*time.Second),
+    // Graceful shutdown timeout
+    loki.WithShutdownTimeout(15*time.Second),
+    // HTTP request timeout to Loki
+    loki.WithTimeout(10*time.Second),
+)
+```
+
+**Timeout Types:**
+
+- **WriteTimeout** (default: 5s) - Maximum time to wait when writing individual log entries. If the context doesn't already have a deadline, this timeout is applied automatically.
+
+- **FlushTimeout** (default: 10s) - Maximum time to wait when flushing buffered logs to Loki. Used by:
+  - Background flusher periodic flushes
+  - `Flush()` method (can be overridden with `FlushContext()`)
+  - Final flush during shutdown
+
+- **ShutdownTimeout** (default: 10s) - Maximum time to wait for graceful shutdown when calling `Close()`. Includes time for:
+  - Stopping the background flusher
+  - Final flush to send remaining logs
+  - Closing transports
+
+- **Timeout** (default: 10s) - HTTP client timeout for requests to Loki server
+
+**Example with context override:**
+
+```go
+// Use default timeouts from config
+logger.Info(ctx, "Regular log")
+
+// Override timeout using context
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()
+logger.Info(ctx, "Log with custom timeout")  // Uses 2s instead of default WriteTimeout
+
+// Override flush timeout
+flushCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+logger.FlushContext(flushCtx)  // Uses 30s instead of default FlushTimeout
+```
 
 ## Log Levels
 
@@ -235,7 +284,9 @@ The library supports the following log levels (from lowest to highest):
 Add structured fields to your logs:
 
 ```go
-logger.Info("User logged in", loki.Fields{
+ctx := context.Background()
+
+logger.Info(ctx, "User logged in", loki.Fields{
     "user_id":  123,
     "username": "john_doe",
     "ip":       "192.168.1.1",
@@ -243,18 +294,230 @@ logger.Info("User logged in", loki.Fields{
 })
 ```
 
-## Context Logging
+## Logger with Fields
 
-Create a logger with additional context:
+Create a logger with additional context fields that are added as labels:
 
 ```go
+// Create a child logger with additional labels
 userLogger := logger.WithFields(loki.Fields{
-    "component": "user_handler",
-    "version":   "v2",
+    "component": "user_handler",  // Added as label
+    "version":   "v2",             // Added as label
 })
 
-userLogger.Info("Processing request")
+ctx := context.Background()
+userLogger.Info(ctx, "Processing request")
+// All logs from userLogger will have component="user_handler" and version="v2" labels
 ```
+
+### Important: String Values Only
+
+`WithFields` only accepts **string values** for labels. Non-string values trigger a warning:
+
+```go
+// ✅ CORRECT - String values
+logger.WithFields(loki.Fields{
+    "environment": "production",  // OK
+    "region":      "us-east-1",   // OK
+})
+
+// ❌ INCORRECT - Non-string values
+logger.WithFields(loki.Fields{
+    "user_id": 12345,           // Warning! Ignored
+    "active":  true,            // Warning! Ignored
+    "count":   100,             // Warning! Ignored
+})
+// Output: [loki-logger] transport error [logger]: WithFields: field 'user_id' has non-string value...
+
+// ✅ SOLUTION - Use Fields parameter in log methods for non-string values
+logger.Info(ctx, "User action", loki.Fields{
+    "user_id": 12345,     // OK - fields can be any type
+    "active":  true,      // OK
+    "count":   100,       // OK
+})
+```
+
+### Labels vs Fields
+
+- **WithFields**: Creates labels (low cardinality, indexed in Loki)
+- **Fields parameter**: Creates fields (high cardinality, searchable but not indexed)
+
+```go
+// Labels for filtering (use WithFields)
+serviceLogger := logger.WithFields(loki.Fields{
+    "service":     "api",
+    "environment": "prod",
+})
+
+// Fields for data (use Fields parameter in log methods)
+serviceLogger.Info(ctx, "Request processed", loki.Fields{
+    "user_id":      12345,
+    "request_id":   "abc-123",
+    "duration_ms":  150,
+    "status_code":  200,
+})
+```
+
+## Context Support
+
+The logger requires Go's `context.Context` as the first parameter for all logging methods, enabling proper cancellation, deadline handling, and distributed tracing support:
+
+### Context-Aware Logging
+
+All logging methods require a `context.Context` as the first parameter:
+
+```go
+ctx := context.Background()
+
+// All logging methods require context
+logger.Info(ctx, "Simple log")
+logger.Error(ctx, "Error occurred", loki.Fields{
+    "error": err.Error(),
+})
+```
+
+Available logging methods:
+- `Debug(ctx, message, fields...)`
+- `Info(ctx, message, fields...)`
+- `Warn(ctx, message, fields...)`
+- `Error(ctx, message, fields...)`
+- `Fatal(ctx, message, fields...)`
+- `Log(ctx, level, message, fields...)`
+
+### Context with Timeout
+
+The logger respects context deadlines and timeouts:
+
+```go
+// Create context with timeout
+ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+defer cancel()
+
+// Log will respect the timeout
+logger.Info(ctx, "Operation completed", loki.Fields{
+    "duration": time.Since(start),
+})
+```
+
+### Context with Cancellation
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+
+// Cancel context when needed
+go func() {
+    time.Sleep(1 * time.Second)
+    cancel()
+}()
+
+// Log respects cancellation
+logger.Info(ctx, "Processing...", loki.Fields{
+    "status": "in_progress",
+})
+```
+
+### Flush and Close with Context
+
+Control shutdown behavior with context:
+
+```go
+// Flush with timeout
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+if err := logger.FlushContext(ctx); err != nil {
+    log.Printf("Failed to flush: %v", err)
+}
+
+// Close with custom timeout
+if err := logger.CloseContext(ctx); err != nil {
+    log.Printf("Failed to close: %v", err)
+}
+```
+
+### Graceful Shutdown
+
+The logger implements graceful shutdown with automatic timeout:
+
+```go
+logger, _ := loki.New(loki.DefaultConfig(), loki.WithAppName("my-app"))
+
+// Application code...
+logger.Info(ctx, "Processing...")
+
+// On shutdown (e.g., signal handler)
+if err := logger.Close(); err != nil {
+    // Close waits up to 10 seconds for:
+    // 1. Background flusher to stop
+    // 2. Final flush to Loki to complete
+    log.Printf("Warning: shutdown timeout: %v", err)
+}
+```
+
+**Shutdown behavior:**
+- Close() signals the background flusher to stop
+- Background flusher performs a final flush (5s timeout)
+- Close() waits up to 10 seconds total for clean shutdown
+- If timeout exceeded, returns error but doesn't leak goroutines
+- All buffered logs are sent before shutdown (unless timeout exceeded)
+
+## Error Handling
+
+The logger provides configurable error handling for transport failures (e.g., network errors when sending to Loki):
+
+### Default Error Handler
+
+By default, transport errors are written to `stderr`:
+
+```go
+logger, err := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+)
+// Transport errors automatically written to stderr:
+// [loki-logger] transport error [loki]: connection timeout
+```
+
+### Custom Error Handler
+
+You can provide a custom error handler to integrate with your monitoring system:
+
+```go
+logger, err := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithErrorHandler(func(transportName string, err error) {
+        // Send to your monitoring system
+        metrics.IncrementCounter("logger_transport_errors", map[string]string{
+            "transport": transportName,
+        })
+
+        // Or log to another logger
+        log.Printf("Transport %s failed: %v", transportName, err)
+    }),
+)
+```
+
+### Silent Error Handler
+
+To suppress transport errors completely (not recommended for production):
+
+```go
+logger, err := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithErrorHandler(func(transportName string, err error) {
+        // Do nothing - silently ignore errors
+    }),
+)
+```
+
+### Important Notes
+
+- Transport errors are **non-blocking** - logging continues even if a transport fails
+- Errors are reported for both `Write()` operations and `Flush()`/`Close()` operations
+- Console transport errors are rare (typically only I/O errors)
+- Loki transport errors are more common (network issues, authentication failures, etc.)
 
 ## Labels and Indexing in Loki
 
@@ -335,54 +598,254 @@ logger.Info("User action", loki.Fields{
 })
 ```
 
-### Label Cardinality Warning
+### Label Cardinality Validation
 
-⚠️ **Important**: Keep label cardinality low. Don't use high-cardinality values as labels:
+⚠️ **Important**: Keep label cardinality low. The logger automatically tracks and warns about high-cardinality labels.
+
+#### Automatic Cardinality Tracking
+
+By default, the logger tracks unique values per label and warns when a label exceeds 10 unique values:
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),  // MaxLabelCardinality = 10
+    loki.WithAppName("my-app"),
+)
+
+// This will trigger a warning after 10 unique user IDs
+for i := 0; i < 15; i++ {
+    userLogger := logger.WithFields(loki.Fields{
+        "user_id": fmt.Sprintf("user-%d", i),  // High cardinality!
+    })
+    userLogger.Info(ctx, "User action")
+}
+// Output: [loki-logger] WARNING: label 'user_id' has 11 unique values (threshold: 10)
+```
+
+#### Configure Cardinality Threshold
+
+Adjust the threshold based on your needs:
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithMaxLabelCardinality(20),  // Allow up to 20 unique values
+)
+
+// Disable cardinality checking completely
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithMaxLabelCardinality(0),  // Disabled
+)
+```
+
+#### Custom Cardinality Warning Handler
+
+Integrate cardinality warnings with your monitoring system:
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithCardinalityWarningHandler(func(labelKey string, uniqueValues, threshold int) {
+        // Send to metrics
+        metrics.Gauge("logger.label.cardinality", uniqueValues,
+            "label:"+labelKey)
+
+        // Alert if severely exceeded
+        if uniqueValues > threshold*2 {
+            alerting.SendAlert("High label cardinality detected")
+        }
+    }),
+)
+```
+
+#### Best Practices
 
 ```go
 // ❌ BAD - Don't do this
 labels["user_id"] = "12345"      // Too many unique values
 labels["timestamp"] = time.Now() // Changes constantly
 labels["ip"] = clientIP          // Too many unique values
+labels["request_id"] = uuid      // Infinite cardinality
 
 // ✅ GOOD - Use these as fields instead
 fields := loki.Fields{
-    "user_id":   12345,
-    "timestamp": time.Now(),
-    "ip":        clientIP,
+    "user_id":    12345,
+    "timestamp":  time.Now(),
+    "ip":         clientIP,
+    "request_id": uuid,
 }
+
+// ✅ GOOD - Labels with low cardinality
+labels := map[string]string{
+    "environment": "production",  // 3-4 values (dev, staging, prod)
+    "region":      "us-east-1",   // 5-10 values (AWS regions)
+    "service":     "api",          // 5-20 values (microservices)
+}
+```
+
+## Rate Limiting
+
+Protect your Loki instance from log bombing and excessive load with built-in rate limiting.
+
+### How It Works
+
+The rate limiter uses a **token bucket algorithm** with intelligent sampling:
+
+1. **Under the limit**: All logs pass through normally
+2. **Over the limit**: Logs are sampled based on `SamplingRatio`
+3. **Critical logs**: Error and Fatal logs always pass (configurable)
+
+### Basic Configuration
+
+```go
+logger, err := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    // Allow max 1000 logs/second, sample 10% when exceeded
+    loki.WithRateLimit(1000, 0.1),
+)
+```
+
+### Advanced Configuration
+
+```go
+logger, err := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+
+    // Set rate limit
+    loki.WithMaxLogsPerSecond(1000),
+
+    // Set sampling ratio (0.1 = keep 1 in 10 logs when over limit)
+    loki.WithSamplingRatio(0.1),
+
+    // Configure which levels are never rate-limited
+    loki.WithAlwaysLogLevels([]loki.Level{
+        loki.LevelError,
+        loki.LevelFatal,
+        // loki.LevelWarn, // Optionally never rate-limit warnings
+    }),
+
+    // Monitor rate limiting statistics
+    loki.WithRateLimitHandler(func(dropped, sampled int) {
+        fmt.Printf("Rate limit stats: %d dropped, %d sampled\n", dropped, sampled)
+
+        // Send to your metrics system
+        metrics.IncrementCounter("logs_dropped", dropped)
+        metrics.IncrementCounter("logs_sampled", sampled)
+    }),
+
+    // Report stats every 5 seconds (default: 10s)
+    loki.WithRateLimitStatsInterval(5 * time.Second),
+)
+```
+
+### Behavior Example
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithRateLimit(100, 0.1), // 100 logs/sec, 10% sampling
+)
+
+ctx := context.Background()
+
+// Scenario: Loop generates 1000 logs/second
+for i := 0; i < 1000; i++ {
+    if i < 100 {
+        logger.Info(ctx, "Request processed")  // ✓ Allowed (under limit)
+    } else if i%10 == 0 {
+        logger.Info(ctx, "Request processed")  // ✓ Sampled (1 in 10)
+    } else {
+        logger.Info(ctx, "Request processed")  // ✗ Dropped
+    }
+
+    // Error logs ALWAYS pass through
+    logger.Error(ctx, "Critical error")        // ✓ Always allowed
+}
+// Result: ~190 logs sent (100 normal + ~90 sampled + all errors)
+```
+
+### Tuning Guidelines
+
+| Scenario | Recommended Config |
+|----------|-------------------|
+| Low-traffic app | `WithRateLimit(500, 0.1)` |
+| Medium-traffic app | `WithRateLimit(1000, 0.1)` |
+| High-traffic app | `WithRateLimit(5000, 0.05)` |
+| Development | `WithMaxLogsPerSecond(0)` (disabled) |
+| Critical services | Lower sampling ratio (0.01-0.05) |
+
+### Monitoring
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithRateLimit(1000, 0.1),
+    loki.WithRateLimitHandler(func(dropped, sampled int) {
+        if dropped > 1000 {
+            // Alert: Too many logs being dropped
+            alerting.SendAlert("High log drop rate")
+        }
+
+        // Track in Prometheus/Datadog/etc
+        metrics.Gauge("logger.dropped", float64(dropped))
+        metrics.Gauge("logger.sampled", float64(sampled))
+    }),
+)
+```
+
+### Disabling Rate Limiting
+
+Rate limiting is **disabled by default**. To explicitly disable:
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-app"),
+    loki.WithMaxLogsPerSecond(0), // 0 = disabled
+)
 ```
 
 ## Best Practices
 
 1. **Always close the logger** - Use `defer logger.Close()` to ensure logs are flushed
-2. **Use appropriate log levels** - Debug for development, Info for production
-3. **Add structured fields** - Better than string formatting for searchable data
-4. **Use labels wisely** - Keep label cardinality low (< 10-20 unique values per label)
-5. **Batch configuration** - Tune BatchSize and FlushInterval for your needs
-6. **Query by level** - Use `{app="my-app", level="error"}` in Grafana for fast filtering
+2. **Pass context** - Always pass `context.Context` to enable proper cancellation and tracing
+3. **Use appropriate log levels** - Debug for development, Info for production
+4. **Add structured fields** - Better than string formatting for searchable data
+5. **Keep label cardinality low** - Use the built-in cardinality validator (default threshold: 10 unique values per label)
+6. **Labels vs Fields** - Use labels for low-cardinality metadata (environment, region) and fields for high-cardinality data (user IDs, timestamps)
+7. **Batch configuration** - Tune BatchSize and FlushInterval for your needs
+8. **Monitor transport errors** - Use `WithErrorHandler` to track logging failures
+9. **Monitor label cardinality** - Use `WithCardinalityWarningHandler` to detect and fix high-cardinality labels
+10. **Query by level** - Use `{app="my-app", level="error"}` in Grafana for fast filtering
+11. **Enable rate limiting in production** - Protect Loki from log bombing (start with `WithRateLimit(1000, 0.1)`)
+12. **Monitor rate limit stats** - Use `WithRateLimitHandler` to track dropped/sampled logs and tune your configuration
 
 ## Architecture
 
 ```
 loki-logger-go/
 ├── logger.go              # Main logger API
-├── levels.go              # Log level definitions
-├── entry.go               # Log entry structure
-├── config.go              # Configuration
-├── errors.go              # Error types
-├── formatter/             # Log formatters
-│   ├── formatter.go       # Formatter interface
-│   ├── json.go           # JSON formatter
-│   └── text.go           # Text formatter
+├── models/                # Core models
+│   ├── config.go         # Configuration
+│   ├── entry.go          # Log entry structure
+│   └── levels.go         # Log level definitions
+├── errors/                # Error types
 ├── transport/             # Transport layer
 │   ├── transport.go      # Transport interface
-│   ├── console.go        # Console transport
-│   ├── loki.go          # Loki transport
-│   └── multi.go         # Multiple transports
+│   ├── console.go        # Console transport with formatting
+│   └── loki.go           # Loki transport
 ├── internal/              # Internal packages
 │   ├── pool/             # Buffer pooling
-│   └── client/           # HTTP client
+│   ├── client/           # HTTP client
+│   └── ratelimit/        # Rate limiting with token bucket
 └── middleware/            # Framework middlewares
     └── gin.go            # Gin middleware
 ```
@@ -391,10 +854,12 @@ loki-logger-go/
 
 The library is designed for high performance:
 
-- **Buffer pooling** reduces memory allocations
-- **Batching** minimizes network calls
+- **Buffer pooling** reduces memory allocations (up to 256KB buffers for stack traces)
+- **Batching** minimizes network calls (configurable batch size)
 - **Async flushing** doesn't block your application
 - **Efficient JSON encoding** with minimal overhead
+- **Rate limiting** prevents excessive load on Loki during traffic spikes
+- **Token bucket algorithm** provides fair and efficient rate limiting
 
 ## Quick Start Guide
 
