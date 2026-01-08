@@ -80,20 +80,6 @@ logger, err := loki.New(
 )
 ```
 
-### Using Environment Variables
-
-For better security, load credentials from environment variables:
-
-```go
-logger, err := loki.New(
-    loki.DefaultConfig(),
-    loki.WithAppName(os.Getenv("APP_NAME")),
-    loki.WithLokiHost(os.Getenv("LOKI_HOST")),
-    loki.WithLokiUsername(os.Getenv("LOKI_USERNAME")),
-    loki.WithLokiPassword(os.Getenv("LOKI_PASSWORD")),
-)
-```
-
 ## Gin Middleware
 
 Automatically log all HTTP requests with built-in Gin middleware:
@@ -141,9 +127,9 @@ r.Use(middleware.GinLoggerWithConfig(middleware.GinLoggerConfig{
 
 ## Distributed Tracing
 
-The Gin middleware **automatically extracts and indexes trace IDs** from HTTP requests for distributed tracing:
+The Gin middleware **automatically extracts trace IDs** from HTTP requests for distributed tracing:
 
-### Automatic Trace ID Indexing
+### Automatic Trace ID Extraction
 
 The middleware looks for trace IDs in these headers:
 - `X-Trace-Id`
@@ -151,27 +137,29 @@ The middleware looks for trace IDs in these headers:
 - `traceparent` (W3C Trace Context)
 
 When found, the `trace_id` is:
-- ✅ **Indexed as a label** in Loki (for fast queries)
-- ✅ **Added to all logs** in that request automatically
+- ✅ **Added to log content** (searchable in Loki)
+- ✅ **Included in all logs** for that request automatically
 - ✅ **No configuration needed** - works out of the box!
+
+**Important**: Trace IDs are added to log **content**, not as labels. This follows Loki best practices to avoid high cardinality issues, as trace IDs are unique per request.
 
 ### Query Logs by Trace ID
 
 ```logql
-# Find all logs for a specific trace
-{app="my-api", trace_id="550e8400-e29b-41d4-a716-446655440000"}
+# Find all logs for a specific trace (search in log content)
+{app="my-api"} |= "550e8400-e29b-41d4-a716-446655440000"
 
-# Find errors in a specific trace
-{app="my-api", trace_id="abc-123", level="error"}
+# Find errors containing a specific trace
+{app="my-api", level="error"} |= "550e8400-e29b-41d4-a716-446655440000"
 ```
 
 ### Example Usage
 
-```go
-// Client sends request with trace ID
+```bash
+# Client sends request with trace ID
 curl -H "X-Trace-Id: my-trace-123" http://localhost:8080/api/users
 
-// All logs in that request will have trace_id="my-trace-123" indexed!
+# All logs in that request will have trace_id="my-trace-123" in log content!
 ```
 
 For complete distributed tracing setup across microservices, see [TRACING.md](./TRACING.md).
