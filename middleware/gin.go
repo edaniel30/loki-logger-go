@@ -35,7 +35,7 @@ func getTraceID(c *gin.Context) string {
 }
 
 // GinLogger returns a Gin middleware that logs HTTP requests.
-// Automatically indexes trace_id as a label in Loki if present in the request.
+// Extracts trace_id from headers and includes it in log content (not as a label).
 func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -54,14 +54,6 @@ func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 		// Get status code
 		statusCode := c.Writer.Status()
 
-		// Create logger with trace_id label if present
-		currentLogger := logger
-		if traceID != "" {
-			currentLogger = logger.WithFields(models.Fields{
-				"trace_id": traceID, // This will be added as a label for indexing
-			})
-		}
-
 		// Build fields
 		fields := models.Fields{
 			"method":            c.Request.Method,
@@ -74,7 +66,7 @@ func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 			"_skip_stack_trace": true, // Skip stack trace for HTTP errors
 		}
 
-		// Add trace_id as field too (for log content)
+		// Add trace_id as field (not as label to avoid high cardinality)
 		if traceID != "" {
 			fields["trace_id"] = traceID
 		}
@@ -89,31 +81,23 @@ func GinLogger(logger *loki.Logger) gin.HandlerFunc {
 
 		// Determine log level based on status code and log
 		if statusCode >= 500 {
-			currentLogger.Error(ctx, "HTTP Request", fields)
+			logger.Error(ctx, "HTTP Request", fields)
 		} else if statusCode >= 400 {
-			currentLogger.Warn(ctx, "HTTP Request", fields)
+			logger.Warn(ctx, "HTTP Request", fields)
 		} else {
-			currentLogger.Info(ctx, "HTTP Request", fields)
+			logger.Info(ctx, "HTTP Request", fields)
 		}
 	}
 }
 
 // GinRecovery returns a Gin middleware that recovers from panics and logs them.
-// Automatically indexes trace_id as a label in Loki if present in the request.
+// Extracts trace_id from headers and includes it in log content (not as a label).
 func GinRecovery(logger *loki.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
 				// Extract trace ID
 				traceID := getTraceID(c)
-
-				// Create logger with trace_id label if present
-				currentLogger := logger
-				if traceID != "" {
-					currentLogger = logger.WithFields(models.Fields{
-						"trace_id": traceID,
-					})
-				}
 
 				// Build error fields
 				fields := models.Fields{
@@ -124,14 +108,14 @@ func GinRecovery(logger *loki.Logger) gin.HandlerFunc {
 					"_skip_stack_trace": true, // Skip stack trace for HTTP panics
 				}
 
-				// Add trace_id as field too
+				// Add trace_id as field (not as label to avoid high cardinality)
 				if traceID != "" {
 					fields["trace_id"] = traceID
 				}
 
 				// Get request context
 				ctx := c.Request.Context()
-				currentLogger.Error(ctx, "Panic recovered", fields)
+				logger.Error(ctx, "Panic recovered", fields)
 
 				// Abort with internal server error
 				c.AbortWithStatus(500)
@@ -192,14 +176,6 @@ func GinLoggerWithConfig(config GinLoggerConfig) gin.HandlerFunc {
 		// Get status code
 		statusCode := c.Writer.Status()
 
-		// Create logger with trace_id label if present
-		currentLogger := config.Logger
-		if traceID != "" {
-			currentLogger = config.Logger.WithFields(models.Fields{
-				"trace_id": traceID,
-			})
-		}
-
 		// Build fields
 		fields := models.Fields{
 			"method":            c.Request.Method,
@@ -212,7 +188,7 @@ func GinLoggerWithConfig(config GinLoggerConfig) gin.HandlerFunc {
 			"_skip_stack_trace": true, // Skip stack trace for HTTP errors
 		}
 
-		// Add trace_id as field too (for log content)
+		// Add trace_id as field (not as label to avoid high cardinality)
 		if traceID != "" {
 			fields["trace_id"] = traceID
 		}
@@ -227,11 +203,11 @@ func GinLoggerWithConfig(config GinLoggerConfig) gin.HandlerFunc {
 
 		// Determine log level based on status code and log
 		if statusCode >= 500 {
-			currentLogger.Error(ctx, "HTTP Request", fields)
+			config.Logger.Error(ctx, "HTTP Request", fields)
 		} else if statusCode >= 400 {
-			currentLogger.Warn(ctx, "HTTP Request", fields)
+			config.Logger.Warn(ctx, "HTTP Request", fields)
 		} else {
-			currentLogger.Info(ctx, "HTTP Request", fields)
+			config.Logger.Info(ctx, "HTTP Request", fields)
 		}
 	}
 }

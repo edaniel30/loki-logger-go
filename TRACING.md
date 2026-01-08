@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Gin middleware automatically extracts and indexes `trace_id` from HTTP requests, enabling distributed tracing across your microservices.
+The Gin middleware automatically extracts `trace_id` from HTTP requests and includes it in log content, enabling distributed tracing across your microservices.
 
 ## How It Works
 
@@ -15,12 +15,13 @@ The middleware automatically looks for trace IDs in these headers (in order):
 3. `traceparent` - W3C Trace Context standard
 4. Gin context (`trace_id` key) - Set by other middleware
 
-### Automatic Indexing
+### Automatic Inclusion in Logs
 
 When a trace ID is found:
-- ✅ **Indexed as a label** in Loki (fast queries)
-- ✅ **Added to log fields** (visible in log content)
+- ✅ **Added to log content** (searchable with LogQL `|=` operator)
+- ✅ **Included in log fields** (visible in log output)
 - ✅ **Applied automatically** to all logs in that request
+- ✅ **NOT indexed as a label** (avoids high cardinality issues)
 
 ## Usage
 
@@ -45,11 +46,11 @@ func main() {
 
     r := gin.New()
 
-    // Just add the middleware - trace_id will be auto-indexed!
+    // Just add the middleware - trace_id will be automatically included!
     r.Use(middleware.GinLogger(logger))
 
     r.GET("/users/:id", func(c *gin.Context) {
-        // All logs in this request will have the same trace_id
+        // All logs in this request will have the same trace_id in content
         logger.Info("Processing user request")
 
         c.JSON(200, gin.H{"id": c.Param("id")})
@@ -170,60 +171,60 @@ logger.Info("External API called", models.Fields{"service": "payment-api"})
 logger.Info("Response sent")
 ```
 
-### 5. Don't Overuse Trace IDs as Labels
+### 5. Querying Logs by Trace ID
 
-⚠️ **Warning**: Trace IDs have **very high cardinality** (millions of unique values).
+Trace IDs are stored in log **content**, not as labels. Use LogQL content search:
 
-The middleware only indexes trace_id when it exists in the request. If you're generating millions of unique trace IDs:
+```logql
+# ✅ CORRECT - Search in log content
+{app="my-api"} |= "550e8400-e29b-41d4-a716-446655440000"
 
-- ✅ Use for debugging specific traces
-- ✅ Short retention (e.g., 7 days)
-- ❌ Don't use for long-term storage
-- ❌ Don't use for general queries
+# ✅ CORRECT - Filter by level, then search trace
+{app="my-api", level="error"} |= "550e8400-e29b-41d4-a716-446655440000"
+
+# ❌ INCORRECT - trace_id is not a label
+{app="my-api", trace_id="550e8400-e29b-41d4-a716-446655440000"}
+```
+
+**Why not use trace_id as a label?**
+- Trace IDs have **extremely high cardinality** (one per request)
+- High cardinality labels cause severe performance issues in Loki
+- Content search with `|=` is sufficient for finding traces
 
 ## Performance Considerations
 
-### Label Cardinality
+### Low Cardinality Design
 
-Trace IDs create **one stream per unique trace ID**. This is fine for:
-- ✅ Short retention periods (7-30 days)
-- ✅ Moderate traffic (< 100k RPM)
-- ✅ Debugging and troubleshooting
+✅ **This library follows Loki best practices:**
 
-May cause issues with:
-- ❌ Very high traffic (> 1M RPM)
-- ❌ Long retention (> 90 days)
-- ❌ Very large number of concurrent traces
+- Trace IDs are stored in **log content**, not as labels
+- No cardinality issues regardless of traffic volume
+- Scales to millions of requests per minute
+- Works with any retention period
 
-### Optimization Tips
+### Query Performance
 
-1. **Use retention policies**:
-   ```yaml
-   # Loki config
-   limits_config:
-     retention_period: 7d  # Short retention for traces
-   ```
+Searching trace IDs in content is fast and efficient:
 
-2. **Query optimization**:
-   ```logql
-   # ✅ GOOD - Specific trace
-   {trace_id="abc123"}
+```logql
+# Fast content search with label pre-filtering
+{app="my-api", level="error"} |= "trace-id-here"
+```
 
-   # ❌ BAD - Scanning all traces
-   {app="my-api"} | json | trace_id =~ ".*"
-   ```
+**Tips for faster queries:**
+1. Always filter by labels first (`app`, `level`, etc.)
+2. Use the `|=` operator for exact trace ID matching
+3. Add time ranges to limit the search scope
 
-3. **Conditional indexing** (future):
-   Only index trace IDs for errors or slow requests
+### No Special Configuration Needed
 
+Unlike label-based tracing, you don't need:
+- ❌ Cardinality limits configuration
+- ❌ Retention policies for high-cardinality labels
+- ❌ Sampling strategies
+- ❌ Special Loki tuning
 
-### High Cardinality Warning in Loki
-
-If you see "cardinality limit exceeded":
-
-1. Reduce trace ID retention
-2. Use sampling (only trace 10% of requests)
-3. Consider not indexing trace_id as label for all requests
+Everything works out of the box with optimal performance.
 
 ## See Also
 
