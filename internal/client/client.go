@@ -8,25 +8,23 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
-	"github.com/edaniel30/loki-logger-go/internal/pool"
+	"github.com/edaniel30/loki-logger-go/internal/client/models"
+	"github.com/edaniel30/loki-logger-go/types"
 )
-
-// Entry represents a single log record.
-// This is duplicated here to avoid import cycles.
-type Entry struct {
-	Level     string
-	Message   string
-	Fields    map[string]any
-	Timestamp time.Time
-	Labels    map[string]string
-}
 
 const (
 	// lokiPushEndpoint is the API endpoint for pushing logs to Loki
 	lokiPushEndpoint = "/loki/api/v1/push"
+
+	// initialBackoffMS is the initial backoff duration for retries in milliseconds
+	initialBackoffMS = 100
+
+	// maxErrorBodySize limits the size of error response bodies to prevent memory exhaustion
+	maxErrorBodySize = 1024 // 1KB
 )
 
 // Client handles HTTP communication with Loki server.
@@ -52,7 +50,7 @@ func NewClient(baseURL string, username string, password string, timeout time.Du
 }
 
 // Push sends log entries to Loki with automatic retries.
-func (c *Client) Push(ctx context.Context, entries []*Entry) error {
+func (c *Client) Push(ctx context.Context, entries []*types.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -66,16 +64,16 @@ func (c *Client) Push(ctx context.Context, entries []*Entry) error {
 }
 
 // buildPayload constructs the JSON payload expected by Loki's push API.
-func (c *Client) buildPayload(entries []*Entry) ([]byte, error) {
+func (c *Client) buildPayload(entries []*types.Entry) ([]byte, error) {
 	// Group entries by label set
-	streams := make(map[string]*stream)
+	streams := make(map[string]*models.Stream)
 
 	for _, entry := range entries {
 		labelKey := c.labelsToKey(entry.Labels)
 
 		s, exists := streams[labelKey]
 		if !exists {
-			s = &stream{
+			s = &models.Stream{
 				Stream: entry.Labels,
 				Values: make([][]string, 0),
 			}
@@ -94,8 +92,8 @@ func (c *Client) buildPayload(entries []*Entry) ([]byte, error) {
 	}
 
 	// Build final payload
-	payload := pushRequest{
-		Streams: make([]*stream, 0, len(streams)),
+	payload := models.PushRequest{
+		Streams: make([]*models.Stream, 0, len(streams)),
 	}
 
 	for _, s := range streams {
@@ -106,12 +104,12 @@ func (c *Client) buildPayload(entries []*Entry) ([]byte, error) {
 }
 
 // formatLogLine converts an entry to a JSON log line.
-func (c *Client) formatLogLine(entry *Entry) (string, error) {
-	buf := pool.Get()
-	defer pool.Put(buf)
+func (c *Client) formatLogLine(entry *types.Entry) (string, error) {
+	buf := Get()
+	defer Put(buf)
 
 	data := make(map[string]any)
-	data["level"] = entry.Level
+	data["level"] = entry.Level.String()
 	data["message"] = entry.Message
 
 	// Add all custom fields
@@ -132,14 +130,28 @@ func (c *Client) formatLogLine(entry *Entry) (string, error) {
 }
 
 // labelsToKey creates a unique key from labels for grouping.
+// Keys are sorted alphabetically to ensure deterministic ordering,
+// since Go map iteration order is non-deterministic.
 func (c *Client) labelsToKey(labels map[string]string) string {
-	buf := pool.Get()
-	defer pool.Put(buf)
+	if len(labels) == 0 {
+		return ""
+	}
 
-	for k, v := range labels {
+	buf := Get()
+	defer Put(buf)
+
+	// Extract and sort keys for deterministic ordering
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Build key string with sorted labels
+	for _, k := range keys {
 		buf.WriteString(k)
 		buf.WriteString("=")
-		buf.WriteString(v)
+		buf.WriteString(labels[k])
 		buf.WriteString(";")
 	}
 
@@ -152,8 +164,8 @@ func (c *Client) sendWithRetry(ctx context.Context, payload []byte) error {
 
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			// Exponential backoff: 100ms, 200ms, 400ms, etc.
-			backoff := time.Duration(100*(1<<uint(attempt-1))) * time.Millisecond
+			// Exponential backoff: 100ms, 200ms, 400ms, 800ms, etc.
+			backoff := time.Duration(initialBackoffMS*(1<<uint(attempt-1))) * time.Millisecond
 			select {
 			case <-time.After(backoff):
 			case <-ctx.Done():
@@ -195,20 +207,11 @@ func (c *Client) send(ctx context.Context, payload []byte) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		// Limit error response body size to prevent memory exhaustion
+		limitedReader := io.LimitReader(resp.Body, maxErrorBodySize)
+		body, _ := io.ReadAll(limitedReader)
 		return fmt.Errorf("loki returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil
-}
-
-// pushRequest represents the JSON structure for Loki's push API.
-type pushRequest struct {
-	Streams []*stream `json:"streams"`
-}
-
-// stream represents a single log stream with labels and values.
-type stream struct {
-	Stream map[string]string `json:"stream"`
-	Values [][]string        `json:"values"`
 }

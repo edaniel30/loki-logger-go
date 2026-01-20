@@ -1,6 +1,9 @@
-package models
+package types
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Level represents the severity of a log entry.
 // Levels are ordered from least to most severe.
@@ -38,25 +41,44 @@ func (l Level) String() string {
 }
 
 // ParseLevel converts a string to its corresponding Level.
-// Returns LevelInfo if the string is not recognized.
-func ParseLevel(level string) Level {
+// Returns an error if the string is not a valid level.
+// Valid values: "debug", "info", "warn", "warning", "error", "fatal" (case-insensitive)
+func ParseLevel(level string) (Level, error) {
 	switch strings.ToLower(level) {
 	case "debug":
-		return LevelDebug
+		return LevelDebug, nil
 	case "info":
-		return LevelInfo
+		return LevelInfo, nil
 	case "warn", "warning":
-		return LevelWarn
+		return LevelWarn, nil
 	case "error":
-		return LevelError
+		return LevelError, nil
 	case "fatal":
-		return LevelFatal
+		return LevelFatal, nil
 	default:
-		return LevelInfo
+		return LevelInfo, fmt.Errorf("invalid log level: %s", level)
 	}
 }
 
 // IsEnabled checks whether this level should be logged given the configured minimum level.
+// Returns true if the level is equal to or more severe than the configured level.
 func (l Level) IsEnabled(configuredLevel Level) bool {
 	return l >= configuredLevel
+}
+
+// MarshalText implements encoding.TextMarshaler for JSON/YAML serialization.
+// This allows Level to be marshaled as a string instead of an integer.
+func (l Level) MarshalText() ([]byte, error) {
+	return []byte(l.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler for JSON/YAML deserialization.
+// This allows Level to be unmarshaled from a string.
+func (l *Level) UnmarshalText(text []byte) error {
+	level, err := ParseLevel(string(text))
+	if err != nil {
+		return err
+	}
+	*l = level
+	return nil
 }
