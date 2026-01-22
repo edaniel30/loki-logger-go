@@ -31,13 +31,13 @@ For more examples (console-only mode, authentication, web applications, error ha
 
 ## Documentation
 
-### 📖 [Configuration Guide](./docs/configuration.md)
+### 📖 [Configuration Guide](./docs/CONFIGURATION.md)
 Learn about all configuration options, functional options, and common configuration patterns for development and production.
 
-### 📚 [Usage Examples](./docs/examples.md)
+### 📚 [Usage Examples](./examples/)
 Practical examples including web applications, HTTP middleware, error handling, structured logging, and best practices.
 
-### 🏷️ [Labels Guide](./docs/labels.md)
+### 🏷️ [Labels Guide](./docs/LABELS.md)
 Understanding labels, cardinality, best practices, and labels vs fields.
 
 ## Log Levels
@@ -94,7 +94,7 @@ apiLogger := logger.WithLabels(types.Labels{
 apiLogger.Info(ctx, "Request processed")
 ```
 
-See [Labels Guide](./docs/labels.md) for best practices on labels vs fields and cardinality.
+See [Labels Guide](./docs/LABELS.md) for best practices on labels vs fields and cardinality.
 
 ## Querying Logs in Grafana
 
