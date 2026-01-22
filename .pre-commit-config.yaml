@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/TekWizely/pre-commit-golang
+    rev: v1.0.0-rc.1
+    hooks:
+      - id: go-mod-tidy
+      - id: golangci-lint-mod
+
+  - repo: local
+    hooks:
+      - id: go-test
+        name: Run Go tests
+        entry: make
+        args: ["test"]
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
