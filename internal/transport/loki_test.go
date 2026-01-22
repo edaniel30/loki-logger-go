@@ -19,7 +19,7 @@ func TestLokiTransport(t *testing.T) {
 		Timeout:       10 * time.Second,
 	}
 	lt := NewLokiTransport(config)
-	defer lt.Close()
+	defer func() { _ = lt.Close() }()
 
 	assert.Equal(t, "loki", lt.Name())
 
@@ -58,7 +58,7 @@ func TestLokiTransport_BatchFlush(t *testing.T) {
 		Timeout:       10 * time.Second,
 	}
 	lt := NewLokiTransport(config)
-	defer lt.Close()
+	defer func() { _ = lt.Close() }()
 
 	entry := &types.Entry{
 		Level:     types.LevelInfo,

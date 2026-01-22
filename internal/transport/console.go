@@ -117,7 +117,7 @@ func (ct *ConsoleTransport) formatFields(fields map[string]any) string {
 	}
 	sort.Strings(keys)
 
-	var parts []string
+	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, fields[k]))
 	}

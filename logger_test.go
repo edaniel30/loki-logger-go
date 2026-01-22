@@ -269,7 +269,7 @@ func TestLoggerFlush(t *testing.T) {
 	mock.FlushErr = errors.New("flush failed")
 	logger.transports = []transport.Transport{mock}
 
-	logger.Flush()
+	_ = logger.Flush()
 	assert.Equal(t, 1, errorCount)
 }
 

@@ -31,14 +31,12 @@ func New(config Config, opts ...Option) (*Logger, error) {
 		transports: make([]transport.Transport, 0),
 	}
 
-	if err := logger.setupTransports(); err != nil {
-		return nil, err
-	}
+	logger.setupTransports()
 
 	return logger, nil
 }
 
-func (l *Logger) setupTransports() error {
+func (l *Logger) setupTransports() {
 	// always add console transport
 	consoleTransport := transport.NewConsoleTransport()
 	l.transports = append(l.transports, consoleTransport)
@@ -56,8 +54,6 @@ func (l *Logger) setupTransports() error {
 		})
 		l.transports = append(l.transports, lokiTransport)
 	}
-
-	return nil
 }
 
 // Debug logs a message at debug level with optional structured fields.

@@ -204,7 +204,7 @@ func (c *Client) send(ctx context.Context, payload []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Limit error response body size to prevent memory exhaustion

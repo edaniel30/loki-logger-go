@@ -1,3 +1,5 @@
+version: 2
+
 run:
   timeout: 5m
   modules-download-mode: readonly
@@ -5,14 +7,11 @@ run:
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
     - gocritic
-    - gofmt
-    - goimports
     - misspell
     - unconvert
     - unparam
@@ -45,9 +44,6 @@ linters-settings:
     disabled-checks:
       - paramTypeCombine
       - assignOp
-
-  goimports:
-    local-prefixes: github.com/edaniel30/loki-logger-go
 
   misspell:
     locale: US
