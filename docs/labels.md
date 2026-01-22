@@ -1,25 +1,24 @@
-# Labels Guide
+# Labels
 
-Labels in Loki are indexed metadata that allow you to efficiently query and filter your logs. This guide covers best practices for using labels effectively.
+Best practices for using Loki labels effectively.
 
 ## What are Labels?
 
-Labels are key-value pairs attached to log entries that Loki indexes. They are used for:
-- **Filtering**: Quickly find logs from specific services, environments, or components
-- **Grouping**: Aggregate logs by common attributes
-- **Querying**: Use LogQL to query logs based on label combinations
+Labels are **indexed** key-value pairs that Loki uses for:
+- **Filtering** - Find logs from specific services, environments, or components
+- **Grouping** - Aggregate logs by common attributes
+- **Querying** - Use LogQL to query by label combinations
+
+**Critical**: Labels create separate streams in Loki. High cardinality = poor performance.
 
 ## Setting Labels
 
 ### Global Labels
 
-Set labels that apply to all log entries from your logger:
-
 ```go
 logger, err := loki.New(
     loki.DefaultConfig(),
     loki.WithAppName("my-service"),
-    loki.WithLokiHost("http://localhost:3100"),
     loki.WithLabels(types.Labels{
         "environment": "production",
         "region":      "us-east-1",
@@ -28,56 +27,48 @@ logger, err := loki.New(
 )
 ```
 
-### Contextual Labels with WithLabels
-
-Create child loggers with additional labels for specific components:
+### Component Labels with WithLabels
 
 ```go
-// Logger for user service component
+// User service logger
 userLogger := logger.WithLabels(types.Labels{
     "component": "user-service",
     "version":   "2.1.0",
 })
 
-// Logger for payment component
+// Payment logger
 paymentLogger := logger.WithLabels(types.Labels{
     "component": "payment",
     "provider":  "stripe",
 })
 ```
 
-**Note**: `WithLabels()` only accepts string values as labels. Non-string values are ignored and a warning is logged.
+**Note**: `WithLabels()` only accepts string values. Non-string values are ignored.
 
 ## Label Cardinality
 
-**Cardinality** is the number of unique label combinations. High cardinality severely impacts Loki's performance.
+**Cardinality** = number of unique label combinations
 
-### What is High Cardinality?
+High cardinality **severely** impacts Loki performance.
 
-High cardinality occurs when labels have many unique values:
+### Why High Cardinality is Bad
 
-```go
-// ❌ BAD: High cardinality (millions of unique values)
-logger.WithLabels(types.Labels{
-    "user_id":       "12345",        // Unique per user
-    "request_id":    "abc-def-ghi",  // Unique per request
-    "timestamp":     "2024-01-15",   // Changes frequently
-    "session_token": "xyz123",       // Unique per session
-})
-```
+| Impact | Description |
+|--------|-------------|
+| **Performance** | Loki creates separate stream for each unique combination |
+| **Memory** | Each stream consumes memory and storage |
+| **Query Speed** | More streams = slower queries |
+| **Cost** | Increased CPU, disk usage, and cloud costs |
 
-### Why is High Cardinality Bad?
+### Cardinality Guidelines
 
-- **Performance**: Loki creates a separate stream for each unique label combination
-- **Memory**: Each stream consumes memory and storage
-- **Query Speed**: More streams = slower queries
-- **Resource Cost**: Increased CPU and disk usage
+| Guideline | Recommendation |
+|-----------|----------------|
+| **Per label** | < 20-50 unique values |
+| **Total combinations** | < 100-200 streams |
+| **Total labels per stream** | 3-6 labels |
 
-### Label Cardinality Best Practices
-
-#### ✅ Good: Low Cardinality Labels
-
-Use labels with limited, predictable values:
+###  Good: Low Cardinality
 
 ```go
 logger, err := loki.New(
@@ -93,65 +84,67 @@ logger, err := loki.New(
 
 // Component-level labels
 apiLogger := logger.WithLabels(types.Labels{
-    "component": "api",        // Limited components
-    "service":   "auth",       // Limited services
-    "version":   "v2.1.0",     // Few versions at a time
+    "component": "api",      // Limited components
+    "service":   "auth",     // Limited services
+    "version":   "v2.1.0",   // Few versions at a time
 })
 ```
 
-**Recommended label cardinality**:
-- Per label: < 20-50 unique values
-- Total combinations: < 100-200 streams
-
-#### ❌ Bad: High Cardinality Labels
-
-Never use labels with unbounded unique values:
+### L Bad: High Cardinality
 
 ```go
-// ❌ DON'T DO THIS
+// DON'T DO THIS - Creates millions of streams
 logger.WithLabels(types.Labels{
-    "user_id":       "12345",           // Millions of users
-    "request_id":    "abc-def",         // Every request
-    "session_id":    "xyz-123",         // Every session
-    "ip_address":    "192.168.1.1",     // Many IPs
-    "email":         "user@example.com", // Per user
-    "timestamp":     time.Now().String(), // Always unique
-    "trace_id":      "...",              // Per request
+    "user_id":       "12345",           // L Millions of users
+    "request_id":    "abc-def",         // L Every request unique
+    "session_id":    "xyz-123",         // L Every session unique
+    "ip_address":    "192.168.1.1",     // L Many IPs
+    "email":         "user@example.com", // L Per user
+    "timestamp":     time.Now().String(), // L Always unique
+    "trace_id":      "...",              // L Per request
 })
 ```
 
 ## Labels vs Fields
 
-Understanding when to use labels versus structured fields is crucial:
-
 | Aspect | Labels | Fields |
 |--------|--------|--------|
 | **Purpose** | Indexing and filtering | Structured log data |
-| **Indexed** | Yes (by Loki) | No |
+| **Indexed** |  Yes (by Loki) | L No |
 | **Query Performance** | Fast filtering | Requires parsing |
 | **Cardinality Impact** | HIGH (creates streams) | None |
-| **Examples** | environment, service, region | user_id, request_id, duration |
+| **Searchable** | Instantly | Via log parsing |
+| **Examples** | `environment`, `service`, `region` | `user_id`, `request_id`, `duration` |
 
-### Use Labels For:
+### Use Labels For
 
-- **Static attributes**: Environment, region, cluster
-- **Low cardinality dimensions**: Service name, component, version
-- **Filtering criteria**: Things you query by frequently
-- **Grouping dimensions**: Aggregation boundaries
+| Category | Examples | Reason |
+|----------|----------|--------|
+| **Static attributes** | `environment`, `region`, `cluster` | Don't change often |
+| **Low cardinality** | `service`, `component`, `version` | Limited unique values |
+| **Filtering criteria** | Things you query by frequently | Fast lookups |
+| **Grouping dimensions** | Aggregation boundaries | Stream organization |
 
-### Use Fields For:
+### Use Fields For
 
-- **Request-specific data**: request_id, user_id, session_id
-- **Variable data**: Durations, counts, error messages
-- **High cardinality attributes**: IPs, emails, tokens
-- **Structured context**: Any data you want in JSON format
+| Category | Examples | Reason |
+|----------|----------|--------|
+| **Request-specific** | `request_id`, `user_id`, `session_id` | Unique per request |
+| **Variable data** | Durations, counts, error messages | Constantly changing |
+| **High cardinality** | IPs, emails, tokens, UUIDs | Too many unique values |
+| **Structured context** | Any data in JSON format | Not for indexing |
 
-### Example: Labels + Fields
+### Example: Proper Separation
 
 ```go
-// ✅ GOOD: Proper separation
-logger.Info(ctx, "User logged in", types.Fields{
-    // Fields (high cardinality, not indexed)
+//  GOOD: Labels for low cardinality, fields for high cardinality
+authLogger := logger.WithLabels(types.Labels{
+    "service":   "auth",     // Low cardinality label
+    "component": "login",    // Low cardinality label
+})
+
+authLogger.Info(ctx, "User logged in", types.Fields{
+    // High cardinality fields (not indexed)
     "user_id":      12345,
     "email":        "user@example.com",
     "ip_address":   "192.168.1.1",
@@ -159,57 +152,180 @@ logger.Info(ctx, "User logged in", types.Fields{
     "duration_ms":  45,
     "user_agent":   "Mozilla/5.0...",
 })
-
-// Labels are set at logger level (low cardinality, indexed)
-authLogger := logger.WithLabels(types.Labels{
-    "service":   "auth",
-    "component": "login",
-})
 ```
 
 ## Querying with Labels
 
-In Grafana/Loki, you can query by labels:
+LogQL queries in Grafana/Loki:
 
 ```logql
 # All logs from production API service
 {app="my-service", environment="production", service="api"}
 
-# Auth component logs only
+# Auth component only
 {app="my-service", component="authentication"}
 
 # Multi-label query
-{app="my-service", environment="production", service="api", region="us-east-1"}
+{app="my-service", environment="production", region="us-east-1"}
+
+# With filter
+{app="my-service", environment="production"} |= "error"
 ```
 
 ## Label Naming Conventions
 
-Follow these conventions for consistency:
+### Recommended Label Names
 
-### Recommended Names
-
-- **environment**: `dev`, `staging`, `production`
-- **region**: `us-east-1`, `eu-west-1`, `ap-southeast-1`
-- **service**: Service name within your app
-- **component**: Subcomponent or module name
-- **version**: Semantic version (e.g., `v2.1.0`)
-- **cluster**: Cluster identifier
-- **datacenter**: Physical location
+| Label | Values | Usage |
+|-------|--------|-------|
+| `environment` | `dev`, `staging`, `production` | Deployment environment |
+| `region` | `us-east-1`, `eu-west-1` | Geographic region |
+| `service` | `api`, `worker`, `auth` | Service name |
+| `component` | `database`, `cache`, `queue` | Subcomponent |
+| `version` | `v2.1.0`, `v2.2.0` | Semantic version |
+| `cluster` | `prod-cluster-1` | Cluster identifier |
+| `datacenter` | `dc-1`, `dc-2` | Physical location |
 
 ### Naming Guidelines
 
-- Use **lowercase** with **underscores**: `service_name`, not `ServiceName` or `serviceName`
-- Be **specific but not verbose**: `db_connection`, not `database_connection_pool_manager`
-- Avoid **redundancy**: `user_service`, not `user_service_service`
-- Use **singular form**: `environment`, not `environments`
+| Guideline | Example | Anti-pattern |
+|-----------|---------|--------------|
+| Use **lowercase + underscores** | `service_name` | `ServiceName`, `serviceName` |
+| Be **specific but concise** | `db_connection` | `database_connection_pool_manager` |
+| Avoid **redundancy** | `user_service` | `user_service_service` |
+| Use **singular form** | `environment` | `environments` |
+| Keep **short** | `env` or `environment` | `application_environment_type` |
+
+## Common Patterns
+
+### Pattern 1: Global + Component Labels
+
+```go
+// Global labels (apply to all logs)
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-service"),
+    loki.WithLabels(types.Labels{
+        "environment": "production",
+        "region":      "us-east-1",
+    }),
+)
+
+// Component-specific labels
+authLogger := logger.WithLabels(types.Labels{"component": "auth"})
+dbLogger := logger.WithLabels(types.Labels{"component": "database"})
+```
+
+### Pattern 2: Service + Version Labels
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("user-api"),
+    loki.WithLabels(types.Labels{
+        "service":     "user-api",
+        "version":     "v2.1.0",
+        "environment": "production",
+    }),
+)
+```
+
+### Pattern 3: Avoid Request-Level Labels
+
+```go
+// L DON'T: Request ID as label (high cardinality)
+reqLogger := logger.WithLabels(types.Labels{
+    "request_id": requestID,  // Creates new stream per request!
+})
+
+//  DO: Request ID as field
+logger.Info(ctx, "Request completed", types.Fields{
+    "request_id": requestID,  // Searchable but not indexed
+})
+```
 
 ## Performance Tips
 
-1. **Limit total labels**: 3-6 labels per stream is ideal
-2. **Keep values bounded**: Each label should have < 50 unique values
+1. **Limit total labels**: 3-6 labels per stream ideal
+2. **Keep values bounded**: Each label < 50 unique values
 3. **Monitor cardinality**: Use Loki's cardinality API
-4. **Use label matchers**: Query specific label combinations
-5. **Avoid dynamic labels**: Never use timestamps, IDs, or random values
+4. **Use label matchers**: Query specific combinations
+5. **Never use dynamic labels**: No timestamps, IDs, or random values
+6. **Prefer fields for variables**: High cardinality data goes in fields
 
-For more information:
+## Troubleshooting High Cardinality
+
+### Symptoms
+
+- Slow queries in Grafana
+- High memory usage in Loki
+- "too many streams" errors
+- Increased Loki disk usage
+
+### Diagnosis
+
+```bash
+# Check cardinality (Loki API)
+curl http://localhost:3100/loki/api/v1/labels
+
+# Check label values
+curl http://localhost:3100/loki/api/v1/label/<label_name>/values
+```
+
+### Fix
+
+1. Identify labels with > 50 unique values
+2. Move high-cardinality labels to fields
+3. Reduce label combinations
+4. Use static values instead of dynamic
+
+## Best Practices Summary
+
+###  Do
+
+```go
+// Use low cardinality labels
+loki.WithLabels(types.Labels{
+    "environment": "production",  // 3-4 values
+    "service":     "api",          // 10-20 services
+    "region":      "us-east-1",    // 10-20 regions
+})
+
+// Put dynamic data in fields
+logger.Info(ctx, "Event", types.Fields{
+    "user_id":    12345,
+    "request_id": "abc-123",
+})
+
+// Only string values in labels
+loki.WithLabels(types.Labels{
+    "version": "2.1.0",  // String
+})
+```
+
+### L Don't
+
+```go
+// Don't use high cardinality labels
+loki.WithLabels(types.Labels{
+    "user_id":    "12345",     // Millions of users
+    "request_id": "abc-123",   // Every request
+    "timestamp":  "...",       // Always changing
+})
+
+// Don't use non-string values in labels
+loki.WithLabels(types.Labels{
+    "user_id": 12345,  // Ignored (not string)
+    "active":  true,   // Ignored (not string)
+})
+
+// Don't create labels per request
+reqLogger := logger.WithLabels(types.Labels{
+    "request_id": uuid.New().String(),  // Creates new stream!
+})
+```
+
+## Resources
+
 - [Loki Best Practices](https://grafana.com/docs/loki/latest/best-practices/)
+- [Understanding Label Cardinality](https://grafana.com/docs/loki/latest/best-practices/#use-dynamic-labels-sparingly)
