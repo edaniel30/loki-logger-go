@@ -2,10 +2,6 @@ package types
 
 import "time"
 
-// Fields is a map of key-value pairs for structured logging.
-// It allows attaching arbitrary metadata to log entries.
-type Fields map[string]any
-
 // Labels is a map of key-value pairs for indexing in Loki.
 type Labels map[string]string
 
@@ -19,7 +15,7 @@ type Entry struct {
 	Message string
 
 	// Fields contains structured data attached to this entry
-	Fields Fields
+	Fields map[string]any
 
 	// Timestamp is when this log entry was created
 	Timestamp time.Time

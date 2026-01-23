@@ -48,7 +48,7 @@ type LokiTransportConfig struct {
 }
 
 // NewLokiTransport creates a new Loki transport with the given configuration.
-func NewLokiTransport(config LokiTransportConfig) *LokiTransport {
+func NewLokiTransport(config *LokiTransportConfig) *LokiTransport {
 	lt := &LokiTransport{
 		client:        client.NewClient(config.LokiURL, config.LokiUsername, config.LokiPassword, config.Timeout, config.MaxRetries),
 		buffer:        make([]*types.Entry, 0, config.BatchSize),

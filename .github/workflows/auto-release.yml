@@ -100,7 +100,7 @@ jobs:
 
           # Save outputs
           echo "tag_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
-          echo "release_name=v${NEW_VERSION} - ${RELEASE_NAME^}" >> $GITHUB_OUTPUT
+          echo "release_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
 
           # Save body to file to avoid multiline issues
           echo "$RELEASE_BODY" > release_body.txt
@@ -118,67 +118,7 @@ jobs:
           body_path: ${{ steps.get_version_info.outputs.body_file }}
           draft: false
           prerelease: false
-          generate_release_notes: true  # GitHub will generate additional notes
-
-      - name: Create backport branch and PR to develop
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN_FOR_RELEASES }}
-        run: |
-          set -e
-
-          BRANCH_NAME="${{ steps.get_version_info.outputs.branch_name }}"
-          TAG_NAME="${{ steps.get_version_info.outputs.tag_name }}"
-          BACKPORT_BRANCH="backport/${TAG_NAME}"
-
-          echo "🔄 Creating backport branch ${BACKPORT_BRANCH}..."
-
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Create backport branch from main (which already has the merge)
-          git checkout main
-          git pull origin main
-          git checkout -b ${BACKPORT_BRANCH}
-
-          # Push backport branch
-          git push origin ${BACKPORT_BRANCH}
-
-          echo "✅ Backport branch created: ${BACKPORT_BRANCH}"
-
-          # Create Pull Request to develop
-          echo "📝 Creating PR to develop..."
-
-          PR_TITLE="🔄 Backport ${TAG_NAME} to develop"
-          PR_BODY="## Backport Release ${TAG_NAME}
-
-          This PR backports the changes from \`${BRANCH_NAME}\` (now in \`main\`) back to \`develop\`.
-
-          ### What's included
-          - All changes from release ${TAG_NAME}
-          - Tag: ${TAG_NAME}
-          - Original branch: \`${BRANCH_NAME}\`
-
-          ### ⚠️ Action Required
-          - Review the changes
-          - Resolve any conflicts if present
-          - Merge this PR to keep \`develop\` in sync with \`main\`
-
-          ---
-          *This PR was automatically created after merging \`${BRANCH_NAME}\` to \`main\`.*"
-
-          # Create PR using GitHub CLI
-          gh pr create \
-            --title "${PR_TITLE}" \
-            --body "${PR_BODY}" \
-            --base develop \
-            --head ${BACKPORT_BRANCH} \
-            --label "backport" \
-            --label "automated" \
-            || echo "⚠️  PR creation failed. May need to create manually."
-
-          echo "✅ PR created successfully"
+          generate_release_notes: false  # Use our custom changelog instead
 
       - name: Delete merged branch
         if: success()

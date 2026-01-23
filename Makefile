@@ -60,5 +60,9 @@ setup:
 	@pre-commit install
 	@echo "Setup complete!"
 
+pre-commit:
+	@echo "Running pre-commit checks on all files..."
+	@pre-commit run --all-files
+
 clean:
 	@rm -f $(COVERAGE_FILE) coverage.html
