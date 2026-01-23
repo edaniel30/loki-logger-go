@@ -2,6 +2,7 @@ package mocks
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"time"
 
@@ -57,17 +58,12 @@ func (m *MockTransport) Write(ctx context.Context, entries ...*types.Entry) erro
 			Level:     entry.Level,
 			Message:   entry.Message,
 			Timestamp: entry.Timestamp,
-			Fields:    make(types.Fields),
+			Fields:    make(map[string]any),
 			Labels:    make(types.Labels),
 		}
 
-		for k, v := range entry.Fields {
-			entryCopy.Fields[k] = v
-		}
-
-		for k, v := range entry.Labels {
-			entryCopy.Labels[k] = v
-		}
+		maps.Copy(entryCopy.Fields, entry.Fields)
+		maps.Copy(entryCopy.Labels, entry.Labels)
 
 		m.entries = append(m.entries, entryCopy)
 	}

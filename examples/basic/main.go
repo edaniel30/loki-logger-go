@@ -33,12 +33,12 @@ func main() {
 
 	// Log at different levels
 	logger.Info(ctx, "Application started", nil)
-	logger.Debug(ctx, "Debug information", types.Fields{
+	logger.Debug(ctx, "Debug information", map[string]any{
 		"environment": "development",
 	})
 
 	// Log with structured fields
-	logger.Info(ctx, "User action", types.Fields{
+	logger.Info(ctx, "User action", map[string]any{
 		"user_id": 12345,
 		"action":  "login",
 		"ip":      "192.168.1.1",
@@ -47,13 +47,13 @@ func main() {
 	// Simulate some work
 	time.Sleep(1 * time.Second)
 
-	logger.Warn(ctx, "Warning message", types.Fields{
+	logger.Warn(ctx, "Warning message", map[string]any{
 		"reason": "high memory usage",
 		"usage":  85.5,
 	})
 
 	// Log an error
-	logger.Error(ctx, "Failed to process request", types.Fields{
+	logger.Error(ctx, "Failed to process request", map[string]any{
 		"error":      "connection timeout",
 		"request_id": "abc-123",
 		"retries":    3,

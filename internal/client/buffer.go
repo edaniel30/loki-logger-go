@@ -30,7 +30,11 @@ var bufferPool = sync.Pool{
 // Get retrieves a buffer from the pool and resets it for use.
 // The caller must return the buffer using Put when done.
 func Get() *bytes.Buffer {
-	buf := bufferPool.Get().(*bytes.Buffer)
+	buf, ok := bufferPool.Get().(*bytes.Buffer)
+	if !ok {
+		// This should never happen since we control what goes into the pool
+		buf = new(bytes.Buffer)
+	}
 	buf.Reset()
 	return buf
 }

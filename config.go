@@ -60,8 +60,8 @@ type ErrorHandler func(transportName string, err error)
 //		loki.WithAppName("my-app"),
 //		loki.WithLokiHost("http://loki:3100"),
 //	)
-func DefaultConfig() Config {
-	return Config{
+func DefaultConfig() *Config {
+	return &Config{
 		AppName:           "app",
 		LokiHost:          "http://localhost:3100",
 		LogLevel:          types.LevelInfo,
