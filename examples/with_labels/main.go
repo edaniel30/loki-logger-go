@@ -36,7 +36,7 @@ func main() {
 	ctx := context.Background()
 
 	// Parent logger with global labels
-	logger.Info(ctx, "Application started", types.Fields{
+	logger.Info(ctx, "Application started", map[string]any{
 		"version": "1.0.0",
 	})
 
@@ -46,7 +46,7 @@ func main() {
 		"service":   "users",
 	})
 
-	apiLogger.Info(ctx, "API request received", types.Fields{
+	apiLogger.Info(ctx, "API request received", map[string]any{
 		"method":     "GET",
 		"path":       "/api/users",
 		"request_id": "req-001",
@@ -55,7 +55,7 @@ func main() {
 	// Simulate API processing
 	time.Sleep(100 * time.Millisecond)
 
-	apiLogger.Info(ctx, "API request completed", types.Fields{
+	apiLogger.Info(ctx, "API request completed", map[string]any{
 		"request_id":  "req-001",
 		"status_code": 200,
 		"duration_ms": 95,
@@ -67,7 +67,7 @@ func main() {
 		"service":   "postgres",
 	})
 
-	dbLogger.Info(ctx, "Database query executed", types.Fields{
+	dbLogger.Info(ctx, "Database query executed", map[string]any{
 		"query":        "SELECT * FROM users",
 		"duration_ms":  45,
 		"rows_fetched": 150,
@@ -79,7 +79,7 @@ func main() {
 		"service":   "redis",
 	})
 
-	cacheLogger.Info(ctx, "Cache hit", types.Fields{
+	cacheLogger.Info(ctx, "Cache hit", map[string]any{
 		"key": "user:12345",
 		"ttl": 3600,
 	})

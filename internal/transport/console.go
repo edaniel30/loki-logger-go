@@ -47,7 +47,7 @@ func (ct *ConsoleTransport) Write(ctx context.Context, entries ...*types.Entry) 
 	for _, entry := range entries {
 		formatted := ct.format(entry)
 
-		if _, err := os.Stdout.Write([]byte(formatted)); err != nil {
+		if _, err := os.Stdout.WriteString(formatted); err != nil {
 			return fmt.Errorf("failed to write to console: %w", err)
 		}
 	}

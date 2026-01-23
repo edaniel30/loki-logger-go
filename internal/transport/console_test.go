@@ -24,11 +24,11 @@ func TestConsoleTransport(t *testing.T) {
 	assert.Equal(t, colorMagenta+"[FATAL]"+colorReset, ct.formatLevel(types.LevelFatal))
 
 	// Test formatFields
-	assert.Equal(t, "", ct.formatFields(types.Fields{}))
-	assert.Equal(t, "key=value", ct.formatFields(types.Fields{"key": "value"}))
+	assert.Equal(t, "", ct.formatFields(map[string]any{}))
+	assert.Equal(t, "key=value", ct.formatFields(map[string]any{"key": "value"}))
 
 	// Test sorted fields
-	result := ct.formatFields(types.Fields{
+	result := ct.formatFields(map[string]any{
 		"zebra": "last",
 		"apple": "first",
 		"moon":  "middle",
@@ -36,7 +36,7 @@ func TestConsoleTransport(t *testing.T) {
 	assert.Equal(t, "apple=first moon=middle zebra=last", result)
 
 	// Test fields with different types
-	result = ct.formatFields(types.Fields{
+	result = ct.formatFields(map[string]any{
 		"string": "text",
 		"number": 42,
 		"float":  3.14,
@@ -52,7 +52,7 @@ func TestConsoleTransport(t *testing.T) {
 		Level:     types.LevelInfo,
 		Message:   "test message",
 		Timestamp: time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC),
-		Fields:    types.Fields{"user": "john"},
+		Fields:    map[string]any{"user": "john"},
 	}
 	result = ct.format(entry)
 	assert.Contains(t, result, "2024-01-15 10:30:45")
@@ -66,7 +66,7 @@ func TestConsoleTransport(t *testing.T) {
 		Level:     types.LevelError,
 		Message:   "error occurred",
 		Timestamp: time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC),
-		Fields:    types.Fields{},
+		Fields:    map[string]any{},
 	}
 	result = ct.format(entry)
 	assert.Contains(t, result, "2024-01-15 10:30:45")
