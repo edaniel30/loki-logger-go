@@ -122,7 +122,7 @@ func (c *Client) formatLogLine(entry *types.Entry) (string, error) {
 
 	// Remove trailing newline added by encoder
 	line := buf.String()
-	if len(line) > 0 && line[len(line)-1] == '\n' {
+	if line != "" && line[len(line)-1] == '\n' {
 		line = line[:len(line)-1]
 	}
 
@@ -209,7 +209,10 @@ func (c *Client) send(ctx context.Context, payload []byte) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Limit error response body size to prevent memory exhaustion
 		limitedReader := io.LimitReader(resp.Body, maxErrorBodySize)
-		body, _ := io.ReadAll(limitedReader)
+		body, err := io.ReadAll(limitedReader)
+		if err != nil {
+			return fmt.Errorf("loki returned status %d (failed to read response body: %w)", resp.StatusCode, err)
+		}
 		return fmt.Errorf("loki returned status %d: %s", resp.StatusCode, string(body))
 	}
 

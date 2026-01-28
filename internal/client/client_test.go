@@ -19,7 +19,7 @@ func TestClient_formatLogLine(t *testing.T) {
 	entry := &types.Entry{
 		Level:   types.LevelInfo,
 		Message: "test message",
-		Fields:  types.Fields{},
+		Fields:  map[string]any{},
 	}
 	line, err := c.formatLogLine(entry)
 	require.NoError(t, err)
@@ -33,7 +33,7 @@ func TestClient_formatLogLine(t *testing.T) {
 	entry = &types.Entry{
 		Level:   types.LevelError,
 		Message: "error occurred",
-		Fields: types.Fields{
+		Fields: map[string]any{
 			"user_id": 123,
 			"action":  "login",
 		},
@@ -79,7 +79,7 @@ func TestClient_buildPayload(t *testing.T) {
 		Message:   "warning",
 		Timestamp: time.Unix(1234567890, 123456789),
 		Labels:    types.Labels{"app": "test"},
-		Fields:    types.Fields{"key": "value"},
+		Fields:    map[string]any{"key": "value"},
 	}
 	payload, err = c.buildPayload([]*types.Entry{entry})
 	require.NoError(t, err)
@@ -115,21 +115,21 @@ func TestClient_buildPayload(t *testing.T) {
 		Message:   "message1",
 		Timestamp: time.Unix(1000, 0),
 		Labels:    types.Labels{"app": "test", "env": "prod"},
-		Fields:    types.Fields{},
+		Fields:    map[string]any{},
 	}
 	entry2 := &types.Entry{
 		Level:     types.LevelInfo,
 		Message:   "message2",
 		Timestamp: time.Unix(1001, 0),
 		Labels:    types.Labels{"app": "test", "env": "prod"}, // Same labels
-		Fields:    types.Fields{},
+		Fields:    map[string]any{},
 	}
 	entry3 := &types.Entry{
 		Level:     types.LevelError,
 		Message:   "message3",
 		Timestamp: time.Unix(1002, 0),
 		Labels:    types.Labels{"app": "test", "env": "dev"}, // Different labels
-		Fields:    types.Fields{},
+		Fields:    map[string]any{},
 	}
 
 	payload, err = c.buildPayload([]*types.Entry{entry1, entry2, entry3})

@@ -18,7 +18,7 @@ func TestLokiTransport(t *testing.T) {
 		MaxRetries:    3,
 		Timeout:       10 * time.Second,
 	}
-	lt := NewLokiTransport(config)
+	lt := NewLokiTransport(&config)
 	defer func() { _ = lt.Close() }()
 
 	assert.Equal(t, "loki", lt.Name())
@@ -28,7 +28,7 @@ func TestLokiTransport(t *testing.T) {
 		Message:   "test",
 		Timestamp: time.Now(),
 		Labels:    types.Labels{"app": "test"},
-		Fields:    types.Fields{},
+		Fields:    map[string]any{},
 	}
 
 	ctx := context.Background()
@@ -57,7 +57,7 @@ func TestLokiTransport_BatchFlush(t *testing.T) {
 		MaxRetries:    0,
 		Timeout:       10 * time.Second,
 	}
-	lt := NewLokiTransport(config)
+	lt := NewLokiTransport(&config)
 	defer func() { _ = lt.Close() }()
 
 	entry := &types.Entry{
@@ -65,7 +65,7 @@ func TestLokiTransport_BatchFlush(t *testing.T) {
 		Message:   "test",
 		Timestamp: time.Now(),
 		Labels:    types.Labels{"app": "test"},
-		Fields:    types.Fields{},
+		Fields:    map[string]any{},
 	}
 
 	ctx := context.Background()
@@ -94,7 +94,7 @@ func TestLokiTransport_Close(t *testing.T) {
 		MaxRetries:    3,
 		Timeout:       1 * time.Second,
 	}
-	lt := NewLokiTransport(config)
+	lt := NewLokiTransport(&config)
 
 	time.Sleep(100 * time.Millisecond)
 

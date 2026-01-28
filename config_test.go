@@ -29,18 +29,18 @@ func TestConfigWithAllOptions(t *testing.T) {
 	// Apply ALL options
 	testHandler := func(transport string, err error) {}
 
-	WithAppName("test-app")(&cfg)
-	WithLokiHost("http://loki:3100")(&cfg)
-	WithLokiBasicAuth("admin", "password")(&cfg)
-	WithLogLevel(types.LevelDebug)(&cfg)
-	WithLabels(types.Labels{"env": "test", "region": "us-east"})(&cfg)
-	WithIncludeStackTrace(false)(&cfg)
-	WithOnlyConsole(true)(&cfg)
-	WithBatchSize(200)(&cfg)
-	WithFlushInterval(10 * time.Second)(&cfg)
-	WithMaxRetries(5)(&cfg)
-	WithTimeout(30 * time.Second)(&cfg)
-	WithErrorHandler(testHandler)(&cfg)
+	WithAppName("test-app")(cfg)
+	WithLokiHost("http://loki:3100")(cfg)
+	WithLokiBasicAuth("admin", "password")(cfg)
+	WithLogLevel(types.LevelDebug)(cfg)
+	WithLabels(types.Labels{"env": "test", "region": "us-east"})(cfg)
+	WithIncludeStackTrace(false)(cfg)
+	WithOnlyConsole(true)(cfg)
+	WithBatchSize(200)(cfg)
+	WithFlushInterval(10 * time.Second)(cfg)
+	WithMaxRetries(5)(cfg)
+	WithTimeout(30 * time.Second)(cfg)
+	WithErrorHandler(testHandler)(cfg)
 
 	// Verify all options were applied
 	assert.Equal(t, "test-app", cfg.AppName)

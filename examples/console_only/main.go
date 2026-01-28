@@ -26,13 +26,13 @@ func main() {
 	ctx := context.Background()
 
 	logger.Info(ctx, "Running in console-only mode", nil)
-	logger.Debug(ctx, "This is a debug message", types.Fields{
+	logger.Debug(ctx, "This is a debug message", map[string]any{
 		"mode": "development",
 	})
 
 	// Simulate some processing
 	for i := 1; i <= 5; i++ {
-		logger.Info(ctx, "Processing item", types.Fields{
+		logger.Info(ctx, "Processing item", map[string]any{
 			"item_number": i,
 			"total":       5,
 		})

@@ -3,6 +3,7 @@ package loki
 import (
 	"context"
 	"fmt"
+	"maps"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -17,9 +18,9 @@ type Logger struct {
 	mu         sync.RWMutex
 }
 
-func New(config Config, opts ...Option) (*Logger, error) {
+func New(config *Config, opts ...Option) (*Logger, error) {
 	for _, opt := range opts {
-		opt(&config)
+		opt(config)
 	}
 
 	if err := config.validate(); err != nil {
@@ -27,7 +28,7 @@ func New(config Config, opts ...Option) (*Logger, error) {
 	}
 
 	logger := &Logger{
-		config:     config,
+		config:     *config,
 		transports: make([]transport.Transport, 0),
 	}
 
@@ -43,7 +44,7 @@ func (l *Logger) setupTransports() {
 
 	// if not only console, add loki transport
 	if !l.config.OnlyConsole {
-		lokiTransport := transport.NewLokiTransport(transport.LokiTransportConfig{
+		lokiTransport := transport.NewLokiTransport(&transport.LokiTransportConfig{
 			LokiURL:       l.config.LokiHost,
 			LokiUsername:  l.config.LokiUsername,
 			LokiPassword:  l.config.LokiPassword,
@@ -58,50 +59,50 @@ func (l *Logger) setupTransports() {
 
 // Debug logs a message at debug level with optional structured fields.
 // Debug logs are typically used for detailed diagnostic information during development.
-func (l *Logger) Debug(ctx context.Context, message string, fields types.Fields) {
+func (l *Logger) Debug(ctx context.Context, message string, fields map[string]any) {
 	l.log(ctx, types.LevelDebug, message, fields)
 }
 
 // Info logs a message at info level with optional structured fields.
 // Info logs are used for general informational messages about application state.
-func (l *Logger) Info(ctx context.Context, message string, fields types.Fields) {
+func (l *Logger) Info(ctx context.Context, message string, fields map[string]any) {
 	l.log(ctx, types.LevelInfo, message, fields)
 }
 
 // Warn logs a message at warning level with optional structured fields.
 // Warn logs indicate potentially harmful situations that should be reviewed.
-func (l *Logger) Warn(ctx context.Context, message string, fields types.Fields) {
+func (l *Logger) Warn(ctx context.Context, message string, fields map[string]any) {
 	l.log(ctx, types.LevelWarn, message, fields)
 }
 
 // Error logs a message at error level with optional structured fields.
 // Error logs indicate error conditions that should be investigated.
 // If IncludeStackTrace is enabled, automatically includes a stack trace.
-func (l *Logger) Error(ctx context.Context, message string, fields types.Fields) {
+func (l *Logger) Error(ctx context.Context, message string, fields map[string]any) {
 	l.log(ctx, types.LevelError, message, fields)
 }
 
 // Fatal logs a message at fatal level with optional structured fields.
 // Fatal logs indicate severe errors that may cause application failure.
 // If IncludeStackTrace is enabled, automatically includes a stack trace.
-func (l *Logger) Fatal(ctx context.Context, message string, fields types.Fields) {
+func (l *Logger) Fatal(ctx context.Context, message string, fields map[string]any) {
 	l.log(ctx, types.LevelFatal, message, fields)
 }
 
 // Log logs a message at the specified level with optional structured fields.
 // This method provides direct control over the log level.
-func (l *Logger) Log(ctx context.Context, level types.Level, message string, fields types.Fields) {
+func (l *Logger) Log(ctx context.Context, level types.Level, message string, fields map[string]any) {
 	l.log(ctx, level, message, fields)
 }
 
-func (l *Logger) log(ctx context.Context, level types.Level, message string, fields types.Fields) {
+func (l *Logger) log(ctx context.Context, level types.Level, message string, fields map[string]any) {
 	if !level.IsEnabled(l.config.LogLevel) {
 		return
 	}
 
 	// Use fields directly (no merge needed since we only accept one map now)
 	if fields == nil {
-		fields = make(types.Fields)
+		fields = make(map[string]any)
 	}
 
 	// Check if stack trace should be skipped
@@ -121,9 +122,7 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 	labels["app"] = l.config.AppName
 	labels["level"] = level.String() // Add level as label for Loki indexing
 
-	for k, v := range l.config.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, l.config.Labels)
 
 	transportEntry := &types.Entry{
 		Level:     level,
@@ -234,14 +233,10 @@ func (l *Logger) WithLabels(labels types.Labels) *Logger {
 
 	// Deep copy the Labels map
 	newConfig.Labels = make(types.Labels)
-	for k, v := range l.config.Labels {
-		newConfig.Labels[k] = v
-	}
+	maps.Copy(newConfig.Labels, l.config.Labels)
 
 	// Add new labels (already string type)
-	for k, v := range labels {
-		newConfig.Labels[k] = v
-	}
+	maps.Copy(newConfig.Labels, labels)
 
 	// Share transports with parent logger (they are thread-safe and designed to be shared)
 	newLogger := &Logger{

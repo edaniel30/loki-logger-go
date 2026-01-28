@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestConfig() Config {
-	return Config{
+func newTestConfig() *Config {
+	return &Config{
 		AppName:       "test-app",
 		OnlyConsole:   true,
 		BatchSize:     100,
@@ -38,7 +38,7 @@ func newTestLoggerWithMock(t *testing.T) (*Logger, *mocks.MockTransport) {
 }
 
 func TestNew(t *testing.T) {
-	logger, err := New(Config{
+	logger, err := New(&Config{
 		AppName:       "test-app",
 		LokiHost:      "http://localhost:3100",
 		OnlyConsole:   false,
@@ -52,7 +52,7 @@ func TestNew(t *testing.T) {
 	assert.Equal(t, "test-app", logger.config.AppName)
 	assert.Equal(t, 2, len(logger.transports)) // console + loki
 
-	logger, err = New(Config{
+	logger, err = New(&Config{
 		AppName:       "test-app",
 		OnlyConsole:   true,
 		BatchSize:     100,
@@ -63,7 +63,7 @@ func TestNew(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, len(logger.transports)) // console only
 
-	logger, err = New(Config{
+	logger, err = New(&Config{
 		AppName:       "test-app",
 		BatchSize:     100,
 		FlushInterval: 5 * time.Second,
@@ -79,7 +79,7 @@ func TestNew(t *testing.T) {
 	assert.Equal(t, types.LevelWarn, logger.config.LogLevel)
 	assert.Equal(t, 200, logger.config.BatchSize)
 
-	logger, err = New(Config{AppName: ""})
+	logger, err = New(&Config{AppName: ""})
 	require.Error(t, err)
 	assert.Nil(t, logger)
 	var configErr *ConfigError
@@ -149,7 +149,7 @@ func TestLoggerLabels(t *testing.T) {
 func TestLoggerFields(t *testing.T) {
 	logger, mock := newTestLoggerWithMock(t)
 
-	logger.Info(context.Background(), "test", types.Fields{
+	logger.Info(context.Background(), "test", map[string]any{
 		"user_id":  12345,
 		"action":   "login",
 		"duration": 1.5,
@@ -201,7 +201,7 @@ func TestLoggerStackTrace(t *testing.T) {
 	assert.NotContains(t, entries[0].Message, "Stack trace:")
 
 	mock.Reset()
-	logger.Error(context.Background(), "error message", types.Fields{
+	logger.Error(context.Background(), "error message", map[string]any{
 		"_skip_stack_trace": true,
 	})
 	entries = mock.GetEntries()
