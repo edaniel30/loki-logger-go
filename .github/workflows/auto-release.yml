@@ -76,35 +76,9 @@ jobs:
           echo "📝 Type: $RELEASE_TYPE"
           echo "🏷️  Name: $RELEASE_NAME"
 
-          # Generate changelog from last tag
-          echo "📋 Generating changelog..."
-          if [ "$LAST_VERSION" != "v0.0.0" ]; then
-            CHANGELOG=$(git log ${LAST_VERSION}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          else
-            # First release: get all commits
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
-          fi
-
-          # Create release body
-          RELEASE_BODY="## ${RELEASE_TYPE} v${NEW_VERSION}
-
-          **Merged from:** \`${BRANCH_NAME}\`
-          **Date:** $(date +'%Y-%m-%d %H:%M:%S UTC')
-
-          ### Changes
-
-          ${CHANGELOG}
-
-          ---
-          *This release was automatically generated from the merge of \`${BRANCH_NAME}\` into \`main\`.*"
-
           # Save outputs
           echo "tag_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
           echo "release_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
-
-          # Save body to file to avoid multiline issues
-          echo "$RELEASE_BODY" > release_body.txt
-          echo "body_file=release_body.txt" >> $GITHUB_OUTPUT
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
@@ -115,10 +89,9 @@ jobs:
         with:
           tag_name: ${{ steps.get_version_info.outputs.tag_name }}
           name: ${{ steps.get_version_info.outputs.release_name }}
-          body_path: ${{ steps.get_version_info.outputs.body_file }}
           draft: false
           prerelease: false
-          generate_release_notes: false  # Use our custom changelog instead
+          generate_release_notes: true  # Auto-generate release notes with PR links
 
       - name: Delete merged branch
         if: success()
