@@ -76,35 +76,9 @@ jobs:
           echo "📝 Type: $RELEASE_TYPE"
           echo "🏷️  Name: $RELEASE_NAME"
 
-          # Generate changelog from last tag
-          echo "📋 Generating changelog..."
-          if [ "$LAST_VERSION" != "v0.0.0" ]; then
-            CHANGELOG=$(git log ${LAST_VERSION}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          else
-            # First release: get all commits
-            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
-          fi
-
-          # Create release body
-          RELEASE_BODY="## ${RELEASE_TYPE} v${NEW_VERSION}
-
-          **Merged from:** \`${BRANCH_NAME}\`
-          **Date:** $(date +'%Y-%m-%d %H:%M:%S UTC')
-
-          ### Changes
-
-          ${CHANGELOG}
-
-          ---
-          *This release was automatically generated from the merge of \`${BRANCH_NAME}\` into \`main\`.*"
-
           # Save outputs
           echo "tag_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
-          echo "release_name=v${NEW_VERSION} - ${RELEASE_NAME^}" >> $GITHUB_OUTPUT
-
-          # Save body to file to avoid multiline issues
-          echo "$RELEASE_BODY" > release_body.txt
-          echo "body_file=release_body.txt" >> $GITHUB_OUTPUT
+          echo "release_name=v${NEW_VERSION}" >> $GITHUB_OUTPUT
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
@@ -115,70 +89,9 @@ jobs:
         with:
           tag_name: ${{ steps.get_version_info.outputs.tag_name }}
           name: ${{ steps.get_version_info.outputs.release_name }}
-          body_path: ${{ steps.get_version_info.outputs.body_file }}
           draft: false
           prerelease: false
-          generate_release_notes: true  # GitHub will generate additional notes
-
-      - name: Create backport branch and PR to develop
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN_FOR_RELEASES }}
-        run: |
-          set -e
-
-          BRANCH_NAME="${{ steps.get_version_info.outputs.branch_name }}"
-          TAG_NAME="${{ steps.get_version_info.outputs.tag_name }}"
-          BACKPORT_BRANCH="backport/${TAG_NAME}"
-
-          echo "🔄 Creating backport branch ${BACKPORT_BRANCH}..."
-
-          # Configure git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Create backport branch from main (which already has the merge)
-          git checkout main
-          git pull origin main
-          git checkout -b ${BACKPORT_BRANCH}
-
-          # Push backport branch
-          git push origin ${BACKPORT_BRANCH}
-
-          echo "✅ Backport branch created: ${BACKPORT_BRANCH}"
-
-          # Create Pull Request to develop
-          echo "📝 Creating PR to develop..."
-
-          PR_TITLE="🔄 Backport ${TAG_NAME} to develop"
-          PR_BODY="## Backport Release ${TAG_NAME}
-
-          This PR backports the changes from \`${BRANCH_NAME}\` (now in \`main\`) back to \`develop\`.
-
-          ### What's included
-          - All changes from release ${TAG_NAME}
-          - Tag: ${TAG_NAME}
-          - Original branch: \`${BRANCH_NAME}\`
-
-          ### ⚠️ Action Required
-          - Review the changes
-          - Resolve any conflicts if present
-          - Merge this PR to keep \`develop\` in sync with \`main\`
-
-          ---
-          *This PR was automatically created after merging \`${BRANCH_NAME}\` to \`main\`.*"
-
-          # Create PR using GitHub CLI
-          gh pr create \
-            --title "${PR_TITLE}" \
-            --body "${PR_BODY}" \
-            --base develop \
-            --head ${BACKPORT_BRANCH} \
-            --label "backport" \
-            --label "automated" \
-            || echo "⚠️  PR creation failed. May need to create manually."
-
-          echo "✅ PR created successfully"
+          generate_release_notes: true  # Auto-generate release notes with PR links
 
       - name: Delete merged branch
         if: success()
