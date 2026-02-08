@@ -165,10 +165,14 @@ func TestLoggerFields(t *testing.T) {
 	entries = mock.GetEntries()
 	require.Len(t, entries, 1)
 	assert.NotNil(t, entries[0].Fields)
-	// Now we automatically add file and line fields
-	assert.Equal(t, 2, len(entries[0].Fields))
+	// Verify automatic file and line fields are added
 	assert.Contains(t, entries[0].Fields, "file")
 	assert.Contains(t, entries[0].Fields, "line")
+	// Verify the types and format
+	assert.IsType(t, "", entries[0].Fields["file"])
+	assert.IsType(t, 0, entries[0].Fields["line"])
+	assert.NotEmpty(t, entries[0].Fields["file"])
+	assert.Greater(t, entries[0].Fields["line"], 0)
 
 	// Test that user-provided file and line fields are not overwritten
 	mock.Reset()

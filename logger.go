@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/edaniel30/loki-logger-go/internal/transport"
 	"github.com/edaniel30/loki-logger-go/types"
+	"github.com/edaniel30/loki-logger-go/utils"
 )
 
 type Logger struct {
@@ -108,8 +108,8 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 	}
 
 	// Automatically add caller information (file and line) if not already present
-	// Skip 3 levels: runtime.Caller -> log -> Info/Error/etc -> actual caller
-	if _, file, line, ok := runtime.Caller(3); ok {
+	// Uses utils.GetCaller() to dynamically find the first caller outside the logger package
+	if file, line, ok := utils.GetCaller(); ok {
 		if _, exists := fields["file"]; !exists {
 			fields["file"] = filepath.Base(file)
 		}
