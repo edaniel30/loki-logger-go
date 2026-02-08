@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/edaniel30/loki-logger-go/internal/transport"
 	"github.com/edaniel30/loki-logger-go/types"
+	"github.com/edaniel30/loki-logger-go/utils"
 )
 
 type Logger struct {
@@ -103,6 +105,17 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 	// Use fields directly (no merge needed since we only accept one map now)
 	if fields == nil {
 		fields = make(map[string]any)
+	}
+
+	// Automatically add caller information (file and line) if not already present
+	// Uses utils.GetCaller() to dynamically find the first caller outside the logger package
+	if file, line, ok := utils.GetCaller(); ok {
+		if _, exists := fields["file"]; !exists {
+			fields["file"] = filepath.Base(file)
+		}
+		if _, exists := fields["line"]; !exists {
+			fields["line"] = line
+		}
 	}
 
 	// Check if stack trace should be skipped
