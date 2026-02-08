@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -103,6 +105,13 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 	// Use fields directly (no merge needed since we only accept one map now)
 	if fields == nil {
 		fields = make(map[string]any)
+	}
+
+	// Automatically add caller information (file and line)
+	// Skip 3 levels: runtime.Caller -> log -> Info/Error/etc -> actual caller
+	if _, file, line, ok := runtime.Caller(3); ok {
+		fields["file"] = filepath.Base(file)
+		fields["line"] = line
 	}
 
 	// Check if stack trace should be skipped

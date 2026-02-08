@@ -165,7 +165,10 @@ func TestLoggerFields(t *testing.T) {
 	entries = mock.GetEntries()
 	require.Len(t, entries, 1)
 	assert.NotNil(t, entries[0].Fields)
-	assert.Equal(t, 0, len(entries[0].Fields))
+	// Now we automatically add file and line fields
+	assert.Equal(t, 2, len(entries[0].Fields))
+	assert.Contains(t, entries[0].Fields, "file")
+	assert.Contains(t, entries[0].Fields, "line")
 }
 
 func TestLoggerStackTrace(t *testing.T) {
