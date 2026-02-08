@@ -169,6 +169,17 @@ func TestLoggerFields(t *testing.T) {
 	assert.Equal(t, 2, len(entries[0].Fields))
 	assert.Contains(t, entries[0].Fields, "file")
 	assert.Contains(t, entries[0].Fields, "line")
+
+	// Test that user-provided file and line fields are not overwritten
+	mock.Reset()
+	logger.Info(context.Background(), "test", map[string]any{
+		"file": "custom_file.go",
+		"line": 999,
+	})
+	entries = mock.GetEntries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "custom_file.go", entries[0].Fields["file"])
+	assert.Equal(t, 999, entries[0].Fields["line"])
 }
 
 func TestLoggerStackTrace(t *testing.T) {

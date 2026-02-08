@@ -107,11 +107,15 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		fields = make(map[string]any)
 	}
 
-	// Automatically add caller information (file and line)
+	// Automatically add caller information (file and line) if not already present
 	// Skip 3 levels: runtime.Caller -> log -> Info/Error/etc -> actual caller
 	if _, file, line, ok := runtime.Caller(3); ok {
-		fields["file"] = filepath.Base(file)
-		fields["line"] = line
+		if _, exists := fields["file"]; !exists {
+			fields["file"] = filepath.Base(file)
+		}
+		if _, exists := fields["line"]; !exists {
+			fields["line"] = line
+		}
 	}
 
 	// Check if stack trace should be skipped
