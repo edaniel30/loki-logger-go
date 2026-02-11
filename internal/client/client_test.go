@@ -27,8 +27,9 @@ func TestClient_formatLogLine(t *testing.T) {
 	var data map[string]any
 	err = json.Unmarshal([]byte(line), &data)
 	require.NoError(t, err)
-	assert.Equal(t, "info", data["level"])
 	assert.Equal(t, "test message", data["message"])
+	// level is now only in Loki labels, not in the JSON body
+	assert.Nil(t, data["level"])
 
 	entry = &types.Entry{
 		Level:   types.LevelError,
@@ -43,10 +44,11 @@ func TestClient_formatLogLine(t *testing.T) {
 
 	err = json.Unmarshal([]byte(line), &data)
 	require.NoError(t, err)
-	assert.Equal(t, "error", data["level"])
 	assert.Equal(t, "error occurred", data["message"])
 	assert.Equal(t, float64(123), data["user_id"])
 	assert.Equal(t, "login", data["action"])
+	// level is now only in Loki labels, not in the JSON body
+	assert.Nil(t, data["level"])
 }
 
 func TestClient_labelsToKey(t *testing.T) {
@@ -106,9 +108,10 @@ func TestClient_buildPayload(t *testing.T) {
 	var logData map[string]any
 	err = json.Unmarshal([]byte(logLine), &logData)
 	require.NoError(t, err)
-	assert.Equal(t, "warn", logData["level"])
 	assert.Equal(t, "warning", logData["message"])
 	assert.Equal(t, "value", logData["key"])
+	// level is now only in Loki labels, not in the JSON body
+	assert.Nil(t, logData["level"])
 
 	entry1 := &types.Entry{
 		Level:     types.LevelInfo,

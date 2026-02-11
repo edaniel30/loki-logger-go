@@ -24,39 +24,36 @@ func TestConfigWithAllOptions(t *testing.T) {
 	assert.Equal(t, 5*time.Second, cfg.FlushInterval)
 	assert.Equal(t, 3, cfg.MaxRetries)
 	assert.Equal(t, 10*time.Second, cfg.Timeout)
-	assert.Nil(t, cfg.ErrorHandler)
 
-	// Apply ALL options
-	testHandler := func(transport string, err error) {}
-
+	// Apply remaining configurable options
 	WithAppName("test-app")(cfg)
+	WithAppVersion("2.0.0")(cfg)
+	WithAppEnv("production")(cfg)
 	WithLokiHost("http://loki:3100")(cfg)
 	WithLokiBasicAuth("admin", "password")(cfg)
 	WithLogLevel(types.LevelDebug)(cfg)
 	WithLabels(types.Labels{"env": "test", "region": "us-east"})(cfg)
-	WithIncludeStackTrace(false)(cfg)
 	WithOnlyConsole(true)(cfg)
 	WithBatchSize(200)(cfg)
 	WithFlushInterval(10 * time.Second)(cfg)
-	WithMaxRetries(5)(cfg)
-	WithTimeout(30 * time.Second)(cfg)
-	WithErrorHandler(testHandler)(cfg)
 
 	// Verify all options were applied
 	assert.Equal(t, "test-app", cfg.AppName)
+	assert.Equal(t, "2.0.0", cfg.AppVersion)
+	assert.Equal(t, "production", cfg.AppEnv)
 	assert.Equal(t, "http://loki:3100", cfg.LokiHost)
 	assert.Equal(t, "admin", cfg.LokiUsername)
 	assert.Equal(t, "password", cfg.LokiPassword)
 	assert.Equal(t, types.LevelDebug, cfg.LogLevel)
 	assert.Equal(t, "test", cfg.Labels["env"])
 	assert.Equal(t, "us-east", cfg.Labels["region"])
-	assert.False(t, cfg.IncludeStackTrace)
 	assert.True(t, cfg.OnlyConsole)
 	assert.Equal(t, 200, cfg.BatchSize)
 	assert.Equal(t, 10*time.Second, cfg.FlushInterval)
-	assert.Equal(t, 5, cfg.MaxRetries)
-	assert.Equal(t, 30*time.Second, cfg.Timeout)
-	assert.NotNil(t, cfg.ErrorHandler)
+	// IncludeStackTrace, MaxRetries, Timeout are now hardcoded
+	assert.True(t, cfg.IncludeStackTrace)
+	assert.Equal(t, 3, cfg.MaxRetries)
+	assert.Equal(t, 10*time.Second, cfg.Timeout)
 }
 
 func TestConfigValidate(t *testing.T) {

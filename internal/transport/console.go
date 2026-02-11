@@ -67,10 +67,16 @@ func (ct *ConsoleTransport) format(entry *types.Entry) string {
 	b.WriteString(ct.formatLevel(entry.Level))
 	b.WriteString(" ")
 
+	// Labels as metadata (system context)
+	if len(entry.Labels) > 0 {
+		b.WriteString(ct.formatLabels(entry.Labels))
+		b.WriteString(" ")
+	}
+
 	// Message
 	b.WriteString(entry.Message)
 
-	// Fields (if any)
+	// Fields (if any) - user-specific structured data
 	if len(entry.Fields) > 0 {
 		b.WriteString(" ")
 		b.WriteString(ct.formatFields(entry.Fields))
@@ -102,6 +108,27 @@ func (ct *ConsoleTransport) formatLevel(level types.Level) string {
 	}
 
 	return fmt.Sprintf("%s[%s]%s", color, levelStr, colorReset)
+}
+
+// formatLabels formats labels as key=value pairs, sorted alphabetically.
+func (ct *ConsoleTransport) formatLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
+	// Sort keys for consistent output
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, labels[k]))
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // formatFields formats structured fields as key=value pairs, sorted alphabetically.
