@@ -23,6 +23,18 @@ func TestConsoleTransport(t *testing.T) {
 	assert.Equal(t, colorRed+"[ERROR]"+colorReset, ct.formatLevel(types.LevelError))
 	assert.Equal(t, colorMagenta+"[FATAL]"+colorReset, ct.formatLevel(types.LevelFatal))
 
+	// Test formatLabels
+	assert.Equal(t, "", ct.formatLabels(map[string]string{}))
+	assert.Equal(t, "key=value", ct.formatLabels(map[string]string{"key": "value"}))
+
+	// Test sorted labels
+	labelResult := ct.formatLabels(map[string]string{
+		"zebra": "last",
+		"apple": "first",
+		"moon":  "middle",
+	})
+	assert.Equal(t, "apple=first moon=middle zebra=last", labelResult)
+
 	// Test formatFields
 	assert.Equal(t, "", ct.formatFields(map[string]any{}))
 	assert.Equal(t, "key=value", ct.formatFields(map[string]any{"key": "value"}))
@@ -47,16 +59,19 @@ func TestConsoleTransport(t *testing.T) {
 	assert.Contains(t, result, "number=42")
 	assert.Contains(t, result, "string=text")
 
-	// Test format with fields
+	// Test format with labels and fields
 	entry := &types.Entry{
 		Level:     types.LevelInfo,
 		Message:   "test message",
 		Timestamp: time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC),
+		Labels:    map[string]string{"app": "test", "env": "prod"},
 		Fields:    map[string]any{"user": "john"},
 	}
 	result = ct.format(entry)
 	assert.Contains(t, result, "2024-01-15 10:30:45")
 	assert.Contains(t, result, "[INFO]")
+	assert.Contains(t, result, "app=test")
+	assert.Contains(t, result, "env=prod")
 	assert.Contains(t, result, "test message")
 	assert.Contains(t, result, "user=john")
 	assert.True(t, strings.HasSuffix(result, "\n"))

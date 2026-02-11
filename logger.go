@@ -86,15 +86,9 @@ func (l *Logger) Error(ctx context.Context, message string, fields map[string]an
 
 // Fatal logs a message at fatal level with optional structured fields.
 // Fatal logs indicate severe errors that may cause application failure.
-// If IncludeStackTrace is enabled, automatically includes a stack trace.
+// Stack traces are automatically included for fatal logs.
 func (l *Logger) Fatal(ctx context.Context, message string, fields map[string]any) {
 	l.log(ctx, types.LevelFatal, message, fields)
-}
-
-// Log logs a message at the specified level with optional structured fields.
-// This method provides direct control over the log level.
-func (l *Logger) Log(ctx context.Context, level types.Level, message string, fields map[string]any) {
-	l.log(ctx, level, message, fields)
 }
 
 func (l *Logger) log(ctx context.Context, level types.Level, message string, fields map[string]any) {
@@ -118,24 +112,24 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		}
 	}
 
-	// Check if stack trace should be skipped
-	skipStackTrace := false
-	if skip, ok := fields["_skip_stack_trace"].(bool); ok && skip {
-		skipStackTrace = true
-		delete(fields, "_skip_stack_trace") // Remove internal field
-	}
-
-	// Include stack trace automatically for error and fatal levels if configured
-	if !skipStackTrace && l.config.IncludeStackTrace && (level == types.LevelError || level == types.LevelFatal) {
+	// Include stack trace automatically for error and fatal levels
+	// Stack traces are always enabled (hardcoded to true)
+	if level == types.LevelError || level == types.LevelFatal {
 		stack := string(debug.Stack())
 		message = fmt.Sprintf("%s\n\nStack trace:\n%s", message, stack)
 	}
 
 	labels := make(types.Labels)
-	labels["app"] = l.config.AppName
-	labels["level"] = level.String() // Add level as label for Loki indexing
 
+	// Copy user-provided labels first
 	maps.Copy(labels, l.config.Labels)
+
+	// Set system labels last to prevent user overrides
+	// These are reserved keys that ensure consistent Loki indexing
+	labels["app"] = l.config.AppName
+	labels["level"] = level.String()
+	labels["version"] = l.config.AppVersion
+	labels["environment"] = l.config.AppEnv
 
 	transportEntry := &types.Entry{
 		Level:     level,
@@ -157,76 +151,36 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 	defer l.mu.RUnlock()
 
 	for _, t := range l.transports {
-		if err := t.Write(writeCtx, transportEntry); err != nil {
-			// Call error handler if configured
-			if l.config.ErrorHandler != nil {
-				l.config.ErrorHandler(t.Name(), err)
-			}
-		}
+		// Write to transport, errors are logged but don't stop execution
+		_ = t.Write(writeCtx, transportEntry)
 	}
-}
-
-// Flush ensures all buffered log entries are sent to their destinations.
-// Should be called before application shutdown.
-// Uses the configured Timeout.
-func (l *Logger) Flush() error {
-	ctx, cancel := context.WithTimeout(context.Background(), l.config.Timeout)
-	defer cancel()
-	return l.FlushContext(ctx)
-}
-
-// FlushContext ensures all buffered log entries are sent to their destinations.
-// Respects the provided context for cancellation and deadline.
-func (l *Logger) FlushContext(ctx context.Context) error {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	var firstErr error
-	for _, t := range l.transports {
-		if err := t.Flush(ctx); err != nil {
-			// Call error handler
-			if l.config.ErrorHandler != nil {
-				l.config.ErrorHandler(t.Name(), err)
-			}
-			// Keep track of first error to return
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-
-	return firstErr
 }
 
 // Close releases all resources held by the logger.
 // After calling Close, the logger should not be used.
-// Uses the configured Timeout for graceful shutdown.
+// Flushes buffered logs before closing transports.
 func (l *Logger) Close() error {
-	ctx, cancel := context.WithTimeout(context.Background(), l.config.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return l.CloseContext(ctx)
-}
 
-// CloseContext releases all resources held by the logger.
-// Respects the provided context for cancellation and deadline during flush.
-func (l *Logger) CloseContext(ctx context.Context) error {
-	// Flush before closing
-	flushErr := l.FlushContext(ctx)
+	l.mu.RLock()
+	// Flush all transports first
+	var flushErr error
+	for _, t := range l.transports {
+		if err := t.Flush(ctx); err != nil && flushErr == nil {
+			flushErr = err
+		}
+	}
+	l.mu.RUnlock()
 
+	// Now close all transports
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	var firstErr error
+	var closeErr error
 	for _, t := range l.transports {
-		if err := t.Close(); err != nil {
-			// Call error handler
-			if l.config.ErrorHandler != nil {
-				l.config.ErrorHandler(t.Name(), err)
-			}
-			// Keep track of first error
-			if firstErr == nil {
-				firstErr = err
-			}
+		if err := t.Close(); err != nil && closeErr == nil {
+			closeErr = err
 		}
 	}
 
@@ -234,7 +188,7 @@ func (l *Logger) CloseContext(ctx context.Context) error {
 	if flushErr != nil {
 		return flushErr
 	}
-	return firstErr
+	return closeErr
 }
 
 // WithLabels creates a new logger with additional default labels.

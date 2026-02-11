@@ -104,15 +104,16 @@ func (c *Client) buildPayload(entries []*types.Entry) ([]byte, error) {
 }
 
 // formatLogLine converts an entry to a JSON log line.
+// The message and user fields are included in the JSON body.
+// System labels (app, level, version, environment) are already in Loki labels and excluded from the body.
 func (c *Client) formatLogLine(entry *types.Entry) (string, error) {
 	buf := Get()
 	defer Put(buf)
 
 	data := make(map[string]any)
-	data["level"] = entry.Level.String()
 	data["message"] = entry.Message
 
-	// Add all custom fields
+	// Add all custom fields (user-provided data)
 	maps.Copy(data, entry.Fields)
 
 	encoder := json.NewEncoder(buf)
