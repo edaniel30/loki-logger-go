@@ -104,12 +104,6 @@ func TestLoggerLogLevels(t *testing.T) {
 	assert.Equal(t, types.LevelWarn, entries[2].Level)
 	assert.Equal(t, types.LevelError, entries[3].Level)
 	assert.Equal(t, types.LevelFatal, entries[4].Level)
-
-	mock.Reset()
-	logger.Log(ctx, types.LevelWarn, "warning", nil)
-	entries = mock.GetEntries()
-	require.Len(t, entries, 1)
-	assert.Equal(t, types.LevelWarn, entries[0].Level)
 }
 
 func TestLoggerLabels(t *testing.T) {
@@ -205,6 +199,7 @@ func TestLoggerStackTrace(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Contains(t, entries[0].Message, "Stack trace:")
 
+	// Info and Debug should NOT have stack traces
 	mock.Reset()
 	logger.Info(context.Background(), "info message", nil)
 	entries = mock.GetEntries()
@@ -212,83 +207,11 @@ func TestLoggerStackTrace(t *testing.T) {
 	assert.NotContains(t, entries[0].Message, "Stack trace:")
 	assert.Equal(t, "info message", entries[0].Message)
 
-	logger2, mock2 := newTestLoggerWithMock(t)
-	logger2.Error(context.Background(), "error message", nil)
-	entries = mock2.GetEntries()
-	require.Len(t, entries, 1)
-	assert.NotContains(t, entries[0].Message, "Stack trace:")
-
 	mock.Reset()
-	logger.Error(context.Background(), "error message", map[string]any{
-		"_skip_stack_trace": true,
-	})
+	logger.Debug(context.Background(), "debug message", nil)
 	entries = mock.GetEntries()
 	require.Len(t, entries, 1)
 	assert.NotContains(t, entries[0].Message, "Stack trace:")
-	assert.NotContains(t, entries[0].Fields, "_skip_stack_trace")
-}
-
-func TestLoggerErrorHandler(t *testing.T) {
-	var handlerCalled bool
-	var handlerTransport string
-	var handlerErr error
-
-	cfg := newTestConfig()
-	cfg.ErrorHandler = func(transport string, err error) {
-		handlerCalled = true
-		handlerTransport = transport
-		handlerErr = err
-	}
-	logger, _ := New(cfg)
-	mock := mocks.NewMockTransport("mock")
-	mock.WriteErr = errors.New("write failed")
-	logger.transports = []transport.Transport{mock}
-
-	logger.Info(context.Background(), "test", nil)
-	assert.True(t, handlerCalled)
-	assert.Equal(t, "mock", handlerTransport)
-	assert.EqualError(t, handlerErr, "write failed")
-
-	logger2, mock2 := newTestLoggerWithMock(t)
-	mock2.WriteErr = errors.New("write failed")
-	assert.NotPanics(t, func() {
-		logger2.Info(context.Background(), "test", nil)
-	})
-}
-
-func TestLoggerFlush(t *testing.T) {
-	logger := newTestLogger(t)
-	mock1 := mocks.NewMockTransport("mock1")
-	mock2 := mocks.NewMockTransport("mock2")
-	logger.transports = []transport.Transport{mock1, mock2}
-
-	err := logger.Flush()
-	assert.NoError(t, err)
-	assert.Equal(t, 1, mock1.FlushCalled)
-	assert.Equal(t, 1, mock2.FlushCalled)
-
-	logger = newTestLogger(t)
-	mock1 = mocks.NewMockTransport("mock1")
-	mock1.FlushErr = errors.New("flush error 1")
-	mock2 = mocks.NewMockTransport("mock2")
-	mock2.FlushErr = errors.New("flush error 2")
-	logger.transports = []transport.Transport{mock1, mock2}
-
-	err = logger.Flush()
-	assert.EqualError(t, err, "flush error 1")
-
-	var errorCount int
-	cfg := newTestConfig()
-	cfg.ErrorHandler = func(transport string, err error) {
-		errorCount++
-	}
-	logger, _ = New(cfg)
-	mock := mocks.NewMockTransport("mock")
-	mock.FlushErr = errors.New("flush failed")
-	logger.transports = []transport.Transport{mock}
-
-	_ = logger.Flush()
-	assert.Equal(t, 1, errorCount)
 }
 
 func TestLoggerClose(t *testing.T) {

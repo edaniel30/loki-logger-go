@@ -29,13 +29,9 @@ type Config struct {
 	MaxRetries    int           // Number of times to retry failed requests to Loki (default: 3)
 	Timeout       time.Duration // Timeout for operations (connect, write, flush, shutdown) (default: 10s)
 
-	// Advanced: Handlers for custom behavior (optional)
-	ErrorHandler ErrorHandler // Called when a transport fails to write logs (optional)
+	AppVersion string // Version of the application (default: "1.0.0")
+	AppEnv     string // Environment of the application (default: "local")
 }
-
-// ErrorHandler is called when a transport fails to write logs.
-// It receives the transport name and the error that occurred.
-type ErrorHandler func(transportName string, err error)
 
 // DefaultConfig returns a Config with sensible default values.
 // This is the recommended starting point for most applications.
@@ -43,6 +39,8 @@ type ErrorHandler func(transportName string, err error)
 // Default values:
 //   - AppName: "app"
 //   - LokiHost: "http://localhost:3100"
+//   - AppVersion: "1.0.0"
+//   - AppEnv: "local"
 //   - LogLevel: LevelInfo
 //   - Labels: empty map
 //   - IncludeStackTrace: true
@@ -51,7 +49,6 @@ type ErrorHandler func(transportName string, err error)
 //   - FlushInterval: 5 seconds
 //   - MaxRetries: 3
 //   - Timeout: 10 seconds
-//   - ErrorHandler: nil (errors logged to stderr)
 //
 // Example:
 //
@@ -63,6 +60,8 @@ type ErrorHandler func(transportName string, err error)
 func DefaultConfig() *Config {
 	return &Config{
 		AppName:           "app",
+		AppVersion:        "1.0.0",
+		AppEnv:            "local",
 		LokiHost:          "http://localhost:3100",
 		LogLevel:          types.LevelInfo,
 		Labels:            make(types.Labels),
@@ -72,7 +71,6 @@ func DefaultConfig() *Config {
 		FlushInterval:     5 * time.Second,
 		MaxRetries:        3,
 		Timeout:           10 * time.Second,
-		ErrorHandler:      nil,
 	}
 }
 
@@ -88,6 +86,28 @@ type Option func(*Config)
 func WithAppName(name string) Option {
 	return func(c *Config) {
 		c.AppName = name
+	}
+}
+
+// WithAppVersion sets the application version used as a label in Loki.
+//
+// Example:
+//
+//	loki.WithAppVersion("1.0.0")
+func WithAppVersion(version string) Option {
+	return func(c *Config) {
+		c.AppVersion = version
+	}
+}
+
+// WithAppEnv sets the application environment used as a label in Loki.
+//
+// Example:
+//
+//	loki.WithAppEnv("local")
+func WithAppEnv(env string) Option {
+	return func(c *Config) {
+		c.AppEnv = env
 	}
 }
 
@@ -143,18 +163,6 @@ func WithLabels(labels types.Labels) Option {
 	}
 }
 
-// WithIncludeStackTrace enables or disables stack traces in error and fatal logs.
-// Default is true.
-//
-// Example:
-//
-//	loki.WithIncludeStackTrace(false) // Disable stack traces
-func WithIncludeStackTrace(enabled bool) Option {
-	return func(c *Config) {
-		c.IncludeStackTrace = enabled
-	}
-}
-
 // WithOnlyConsole enables console-only mode, skipping Loki transport entirely.
 // Useful for local development or testing.
 //
@@ -190,45 +198,6 @@ func WithBatchSize(size int) Option {
 func WithFlushInterval(interval time.Duration) Option {
 	return func(c *Config) {
 		c.FlushInterval = interval
-	}
-}
-
-// WithMaxRetries sets the number of times to retry failed requests to Loki.
-// Retries use exponential backoff.
-// Default is 3.
-//
-// Example:
-//
-//	loki.WithMaxRetries(5)
-func WithMaxRetries(retries int) Option {
-	return func(c *Config) {
-		c.MaxRetries = retries
-	}
-}
-
-// WithTimeout sets the timeout for all operations (connect, write, flush, shutdown).
-// Default is 10 seconds.
-//
-// Example:
-//
-//	loki.WithTimeout(30 * time.Second)
-func WithTimeout(timeout time.Duration) Option {
-	return func(c *Config) {
-		c.Timeout = timeout
-	}
-}
-
-// WithErrorHandler sets a custom handler for transport errors.
-// If nil (default), errors are logged to stderr.
-//
-// Example:
-//
-//	loki.WithErrorHandler(func(transport string, err error) {
-//		log.Printf("Transport %s error: %v", transport, err)
-//	})
-func WithErrorHandler(handler ErrorHandler) Option {
-	return func(c *Config) {
-		c.ErrorHandler = handler
 	}
 }
 
