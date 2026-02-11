@@ -15,12 +15,16 @@ import (
 
 func newTestConfig() *Config {
 	return &Config{
-		AppName:       "test-app",
-		OnlyConsole:   true,
-		BatchSize:     100,
-		FlushInterval: 5 * time.Second,
-		MaxRetries:    3,
-		Timeout:       10 * time.Second,
+		AppName:           "test-app",
+		AppVersion:        "1.0.0",
+		AppEnv:            "local",
+		OnlyConsole:       true,
+		IncludeStackTrace: true,
+		BatchSize:         100,
+		FlushInterval:     5 * time.Second,
+		MaxRetries:        3,
+		Timeout:           10 * time.Second,
+		Labels:            make(types.Labels),
 	}
 }
 
@@ -126,8 +130,8 @@ func TestLoggerLabels(t *testing.T) {
 
 	cfg = newTestConfig()
 	cfg.Labels = types.Labels{
-		"environment": "production",
-		"region":      "us-east-1",
+		"team":   "backend",
+		"region": "us-east-1",
 	}
 	logger, _ = New(cfg)
 	mock = mocks.NewMockTransport("mock")
@@ -136,7 +140,11 @@ func TestLoggerLabels(t *testing.T) {
 	logger.Info(context.Background(), "test", nil)
 	entries = mock.GetEntries()
 	require.Len(t, entries, 1)
-	assert.Equal(t, "production", entries[0].Labels["environment"])
+	// System labels are always set and cannot be overridden
+	assert.Equal(t, "local", entries[0].Labels["environment"]) // default value
+	assert.Equal(t, "test-app", entries[0].Labels["app"])      // from config
+	// User labels work normally
+	assert.Equal(t, "backend", entries[0].Labels["team"])
 	assert.Equal(t, "us-east-1", entries[0].Labels["region"])
 }
 
@@ -234,24 +242,28 @@ func TestLoggerClose(t *testing.T) {
 
 func TestLoggerWithLabels(t *testing.T) {
 	cfg := newTestConfig()
-	cfg.Labels = types.Labels{"env": "prod", "region": "us-east"}
+	cfg.Labels = types.Labels{"team": "platform", "region": "us-east"}
 	logger, _ := New(cfg)
 	mock := mocks.NewMockTransport("mock")
 	logger.transports = []transport.Transport{mock}
 
-	childLogger := logger.WithLabels(types.Labels{"component": "auth", "version": "v1"})
+	childLogger := logger.WithLabels(types.Labels{"component": "auth", "service": "api"})
 	childLogger.transports = []transport.Transport{mock}
 
 	childLogger.Info(context.Background(), "test", nil)
 	entries := mock.GetEntries()
 	require.Len(t, entries, 1)
 
-	assert.Equal(t, "prod", entries[0].Labels["env"])
+	// User-provided labels
+	assert.Equal(t, "platform", entries[0].Labels["team"])
 	assert.Equal(t, "us-east", entries[0].Labels["region"])
 	assert.Equal(t, "auth", entries[0].Labels["component"])
-	assert.Equal(t, "v1", entries[0].Labels["version"])
+	assert.Equal(t, "api", entries[0].Labels["service"])
+	// System labels (reserved, cannot be overridden)
 	assert.Equal(t, "test-app", entries[0].Labels["app"])
 	assert.Equal(t, "info", entries[0].Labels["level"])
+	assert.Equal(t, "1.0.0", entries[0].Labels["version"]) // default value
+	assert.Equal(t, "local", entries[0].Labels["environment"]) // default value
 
 	cfg = newTestConfig()
 	cfg.Labels = types.Labels{"env": "prod"}

@@ -120,12 +120,16 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 	}
 
 	labels := make(types.Labels)
+
+	// Copy user-provided labels first
+	maps.Copy(labels, l.config.Labels)
+
+	// Set system labels last to prevent user overrides
+	// These are reserved keys that ensure consistent Loki indexing
 	labels["app"] = l.config.AppName
-	labels["level"] = level.String() // Add level as label for Loki indexing
+	labels["level"] = level.String()
 	labels["version"] = l.config.AppVersion
 	labels["environment"] = l.config.AppEnv
-
-	maps.Copy(labels, l.config.Labels)
 
 	transportEntry := &types.Entry{
 		Level:     level,
