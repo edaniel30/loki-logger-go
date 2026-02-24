@@ -101,6 +101,16 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		fields = make(map[string]any)
 	}
 
+	// Automatically inject trace ID from context if an extractor is configured
+	// and the caller has not already provided it in fields.
+	if l.config.TraceIDExtractor != nil {
+		if _, exists := fields["trace_id"]; !exists {
+			if traceID := l.config.TraceIDExtractor(ctx); traceID != "" {
+				fields["trace_id"] = traceID
+			}
+		}
+	}
+
 	// Automatically add caller information (file and line) if not already present
 	// Uses utils.GetCaller() to dynamically find the first caller outside the logger package
 	if file, line, ok := utils.GetCaller(); ok {

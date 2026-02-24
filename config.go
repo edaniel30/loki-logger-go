@@ -1,16 +1,26 @@
 package loki
 
 import (
+	"context"
 	"time"
 
 	"github.com/edaniel30/loki-logger-go/types"
 )
+
+// TraceIDExtractor is a function that extracts a trace ID from a context.
+// Return an empty string if no trace ID is present.
+type TraceIDExtractor func(ctx context.Context) string
 
 // Config holds the logger configuration.
 // Use DefaultConfig() to get sensible defaults, then customize with Option functions.
 type Config struct {
 	// Required fields
 	AppName string // Application name, used as a label in Loki (required)
+
+	// TraceIDExtractor is an optional function to extract a trace ID from the context.
+	// If set, the result is automatically added to every log entry as "trace_id".
+	// If the caller already includes "trace_id" in fields, it is not overwritten.
+	TraceIDExtractor TraceIDExtractor
 
 	// Loki connection
 	LokiHost     string // Loki server URL, e.g., "http://localhost:3100" (required if not OnlyConsole)
@@ -71,6 +81,7 @@ func DefaultConfig() *Config {
 		FlushInterval:     5 * time.Second,
 		MaxRetries:        3,
 		Timeout:           10 * time.Second,
+		TraceIDExtractor:  nil,
 	}
 }
 
@@ -198,6 +209,19 @@ func WithBatchSize(size int) Option {
 func WithFlushInterval(interval time.Duration) Option {
 	return func(c *Config) {
 		c.FlushInterval = interval
+	}
+}
+
+// WithTraceIDExtractor sets a function that extracts a trace ID from the context on every log call.
+// The extracted value is automatically added to fields as "trace_id".
+// If the caller already provides "trace_id" in fields it is not overwritten.
+//
+// Example:
+//
+//	loki.WithTraceIDExtractor(customcontext.GetTraceID)
+func WithTraceIDExtractor(fn TraceIDExtractor) Option {
+	return func(c *Config) {
+		c.TraceIDExtractor = fn
 	}
 }
 
