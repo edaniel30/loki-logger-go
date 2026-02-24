@@ -7,6 +7,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: go-vuln-check
+        name: Run govulncheck
+        entry: govulncheck
+        args: ["./..."]
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
       - id: go-test
         name: Run Go tests
         entry: make

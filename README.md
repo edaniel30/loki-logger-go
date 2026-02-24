@@ -17,6 +17,8 @@ go get github.com/edaniel30/loki-logger-go
 logger, err := loki.New(
     loki.DefaultConfig(),
     loki.WithAppName("my-service"),
+    loki.WithAppVersion("1.0.0"),
+    loki.WithAppEnv("production"),
     loki.WithLokiHost("http://localhost:3100"),
 )
 if err != nil {
@@ -27,17 +29,12 @@ defer logger.Close()
 logger.Info(context.Background(), "Application started", nil)
 ```
 
-For more examples (console-only mode, authentication, web applications, error handling, etc.), see **[usage examples](./docs/examples.md)**.
-
 ## Documentation
 
-### 📖 [Configuration Guide](./docs/CONFIGURATION.md)
+### 📖 [Configuration Guide](./docs/configuration.md)
 Learn about all configuration options, functional options, and common configuration patterns for development and production.
 
-### 📚 [Usage Examples](./examples/)
-Practical examples including web applications, HTTP middleware, error handling, structured logging, and best practices.
-
-### 🏷️ [Labels Guide](./docs/LABELS.md)
+### 🏷️ [Labels Guide](./docs/labels.md)
 Understanding labels, cardinality, best practices, and labels vs fields.
 
 ## Log Levels
@@ -47,8 +44,8 @@ The library supports five log levels (from lowest to highest):
 - `LevelDebug` - Detailed diagnostic information
 - `LevelInfo` - General informational messages
 - `LevelWarn` - Warning messages
-- `LevelError` - Error messages
-- `LevelFatal` - Critical errors
+- `LevelError` - Error messages (stack trace automatically included)
+- `LevelFatal` - Critical errors (stack trace automatically included)
 
 ```go
 logger.Debug(ctx, "Debug message", nil)
@@ -58,7 +55,7 @@ logger.Error(ctx, "Error occurred", nil)
 logger.Fatal(ctx, "Fatal error", nil)
 ```
 
-Set minimum log level with `LogLevel` config option.
+Set minimum log level with `WithLogLevel`.
 
 ## Structured Logging
 
@@ -72,6 +69,41 @@ logger.Info(ctx, "User logged in", loki.Fields{
 })
 ```
 
+The `file` and `line` fields are automatically injected into every entry, pointing to the exact location in your code where the log was called.
+
+## Automatic Labels
+
+Every log entry automatically includes the following Loki labels, sourced from the logger configuration:
+
+| Label | Option | Default |
+|-------|--------|---------|
+| `app` | `WithAppName` | `"app"` |
+| `level` | _(log level)_ | — |
+| `version` | `WithAppVersion` | `"1.0.0"` |
+| `environment` | `WithAppEnv` | `"local"` |
+
+These labels are **reserved** and cannot be overridden via `WithLabels`.
+
+## Distributed Tracing
+
+Automatically propagate trace IDs from `context.Context` into every log entry:
+
+```go
+logger, _ := loki.New(
+    loki.DefaultConfig(),
+    loki.WithAppName("my-service"),
+    loki.WithTraceIDExtractor(func(ctx context.Context) string {
+        id, _ := ctx.Value(myTraceKey{}).(string)
+        return id
+    }),
+)
+
+// trace_id is added automatically to every log
+logger.Info(ctx, "Processing request", nil)
+```
+
+The `trace_id` field is only added when the extractor returns a non-empty string and the caller hasn't already set it in the fields map.
+
 ## Child Loggers with Labels
 
 Create child loggers with additional context labels:
@@ -81,9 +113,7 @@ Create child loggers with additional context labels:
 logger, _ := loki.New(
     loki.DefaultConfig(),
     loki.WithAppName("my-service"),
-    loki.WithLabels(types.Labels{
-        "environment": "production",
-    }),
+    loki.WithAppEnv("production"),
 )
 
 // Child logger with component-specific labels
@@ -91,21 +121,24 @@ apiLogger := logger.WithLabels(types.Labels{
     "component": "api",
 })
 
-apiLogger.Info(ctx, "Request processed")
+apiLogger.Info(ctx, "Request processed", nil)
 ```
 
-See [Labels Guide](./docs/LABELS.md) for best practices on labels vs fields and cardinality.
+See [Labels Guide](./docs/labels.md) for best practices on labels vs fields and cardinality.
 
 ## Querying Logs in Grafana
 
-Since `level` is automatically added as a label, you can efficiently filter logs:
+Since `app`, `level`, `version`, and `environment` are automatically added as labels, you can efficiently filter logs:
 
 ```logql
-# Get all error logs
+# Get all error logs from a service
 {app="my-service", level="error"}
 
-# Get production errors from specific component
-{app="my-service", environment="production", component="api", level="error"}
+# Get production errors from specific version
+{app="my-service", environment="production", version="2.1.0", level="error"}
+
+# Filter by component label
+{app="my-service", environment="production", component="api"}
 ```
 
 ## Performance
@@ -118,12 +151,13 @@ Since `level` is automatically added as a label, you can efficiently filter logs
 
 ## Best Practices
 
-1. **Always close the logger** - Use `defer logger.Close()` to ensure logs are flushed
-2. **Pass context** - Always pass `context.Context` for proper cancellation and timeout handling
-3. **Keep label cardinality low** - Avoid high-cardinality values (user IDs, timestamps) as labels
-4. **Labels vs Fields** - Use labels for low-cardinality metadata, fields for high-cardinality data
-5. **Tune batch configuration** - Adjust BatchSize and FlushInterval based on your needs
-6. **Monitor transport errors** - Use `WithErrorHandler` to track logging failures
+1. **Always close the logger** — Use `defer logger.Close()` to ensure logs are flushed
+2. **Pass context** — Always pass `context.Context` for proper cancellation and timeout handling
+3. **Set app identity** — Use `WithAppName`, `WithAppVersion`, and `WithAppEnv` for every service
+4. **Keep label cardinality low** — Avoid high-cardinality values (user IDs, timestamps) as labels
+5. **Labels vs Fields** — Use labels for low-cardinality metadata, fields for high-cardinality data
+6. **Use TraceIDExtractor** — Propagate trace IDs for easier distributed tracing correlation
+7. **Tune batch configuration** — Adjust `BatchSize` and `FlushInterval` based on your needs
 
 ## Contributing
 
