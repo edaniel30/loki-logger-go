@@ -28,8 +28,9 @@ type Config struct {
 	// If the caller already includes "trace_id" in fields, it is not overwritten.
 	TraceIDExtractor TraceIDExtractor
 
-	// OnFlushError is an optional callback invoked whenever the background flush to Loki
-	// fails. If nil, flush errors are silently discarded.
+	// OnFlushError is an optional callback invoked whenever a flush to Loki fails,
+	// including both background periodic flushes and synchronous flushes triggered
+	// by Write when the batch is full. If nil, flush errors are silently discarded.
 	OnFlushError OnFlushError
 
 	// Loki connection

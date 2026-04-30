@@ -3,6 +3,8 @@ package loki
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -221,6 +223,12 @@ func TestLoggerStackTrace(t *testing.T) {
 }
 
 func TestLoggerWithOnFlushError(t *testing.T) {
+	// Use a deterministic error server instead of a fixed unreachable port.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
 	received := make(chan error, 1)
 
 	cfg := DefaultConfig()
@@ -230,7 +238,7 @@ func TestLoggerWithOnFlushError(t *testing.T) {
 	logger, err := New(
 		cfg,
 		WithAppName("test-app"),
-		WithLokiHost("http://localhost:1"), // unreachable
+		WithLokiHost(srv.URL),
 		WithBatchSize(1),
 		WithFlushInterval(1*time.Hour),
 		WithOnFlushError(func(err error) {
@@ -242,6 +250,10 @@ func TestLoggerWithOnFlushError(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer func() { _ = logger.Close() }()
+
+	// Remove the console transport so no colored output is written to stdout during tests.
+	// transports[0] is always ConsoleTransport, transports[1] is LokiTransport.
+	logger.transports = logger.transports[1:]
 
 	ctx := context.Background()
 	logger.Info(ctx, "hello", nil)

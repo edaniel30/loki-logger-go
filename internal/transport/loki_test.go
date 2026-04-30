@@ -2,6 +2,8 @@ package transport
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -9,6 +11,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newErrorServer returns an httptest.Server that always responds with 500 Internal Server Error.
+// This deterministically triggers flush errors without relying on unreachable ports.
+func newErrorServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
 
 func TestLokiTransport(t *testing.T) {
 	config := LokiTransportConfig{
@@ -88,9 +101,10 @@ func TestLokiTransport_BatchFlush(t *testing.T) {
 
 func TestLokiTransport_OnFlushError(t *testing.T) {
 	t.Run("callback is invoked on flush error", func(t *testing.T) {
+		srv := newErrorServer(t)
 		var called []error
 		config := LokiTransportConfig{
-			LokiURL:       "http://localhost:1", // unreachable
+			LokiURL:       srv.URL,
 			BatchSize:     1,
 			FlushInterval: 1 * time.Hour,
 			MaxRetries:    0,
@@ -121,8 +135,9 @@ func TestLokiTransport_OnFlushError(t *testing.T) {
 	})
 
 	t.Run("no callback does not panic", func(t *testing.T) {
+		srv := newErrorServer(t)
 		config := LokiTransportConfig{
-			LokiURL:       "http://localhost:1", // unreachable
+			LokiURL:       srv.URL,
 			BatchSize:     1,
 			FlushInterval: 1 * time.Hour,
 			MaxRetries:    0,
@@ -147,9 +162,10 @@ func TestLokiTransport_OnFlushError(t *testing.T) {
 	})
 
 	t.Run("background flush calls callback", func(t *testing.T) {
+		srv := newErrorServer(t)
 		received := make(chan error, 1)
 		config := LokiTransportConfig{
-			LokiURL:       "http://localhost:1", // unreachable
+			LokiURL:       srv.URL,
 			BatchSize:     100,
 			FlushInterval: 50 * time.Millisecond,
 			MaxRetries:    0,

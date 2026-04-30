@@ -10,7 +10,6 @@ import (
 	"github.com/edaniel30/loki-logger-go/types"
 )
 
-
 // LokiTransport sends log entries to a Grafana Loki server.
 // It batches entries for efficiency and flushes periodically.
 type LokiTransport struct {
