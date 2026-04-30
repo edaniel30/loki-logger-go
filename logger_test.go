@@ -18,9 +18,8 @@ func newTestConfig() *Config {
 		AppName:           "test-app",
 		AppVersion:        "1.0.0",
 		AppEnv:            "local",
-		OnlyConsole:       true,
-		IncludeStackTrace: true,
-		BatchSize:         100,
+		OnlyConsole: true,
+		BatchSize:   100,
 		FlushInterval:     5 * time.Second,
 		MaxRetries:        3,
 		Timeout:           10 * time.Second,
@@ -190,7 +189,6 @@ func TestLoggerFields(t *testing.T) {
 
 func TestLoggerStackTrace(t *testing.T) {
 	cfg := newTestConfig()
-	cfg.IncludeStackTrace = true
 	logger, _ := New(cfg)
 	mock := mocks.NewMockTransport("mock")
 	logger.transports = []transport.Transport{mock}
@@ -220,6 +218,40 @@ func TestLoggerStackTrace(t *testing.T) {
 	entries = mock.GetEntries()
 	require.Len(t, entries, 1)
 	assert.NotContains(t, entries[0].Message, "Stack trace:")
+}
+
+func TestLoggerWithOnFlushError(t *testing.T) {
+	received := make(chan error, 1)
+
+	cfg := DefaultConfig()
+	cfg.MaxRetries = 0
+	cfg.Timeout = 100 * time.Millisecond
+
+	logger, err := New(
+		cfg,
+		WithAppName("test-app"),
+		WithLokiHost("http://localhost:1"), // unreachable
+		WithBatchSize(1),
+		WithFlushInterval(1*time.Hour),
+		WithOnFlushError(func(err error) {
+			select {
+			case received <- err:
+			default:
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer func() { _ = logger.Close() }()
+
+	ctx := context.Background()
+	logger.Info(ctx, "hello", nil)
+
+	select {
+	case err := <-received:
+		assert.ErrorContains(t, err, "failed to push to Loki")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected OnFlushError to be called")
+	}
 }
 
 func TestLoggerClose(t *testing.T) {

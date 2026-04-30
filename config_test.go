@@ -18,7 +18,6 @@ func TestConfigWithAllOptions(t *testing.T) {
 	assert.Equal(t, "http://localhost:3100", cfg.LokiHost)
 	assert.Equal(t, types.LevelInfo, cfg.LogLevel)
 	assert.NotNil(t, cfg.Labels)
-	assert.True(t, cfg.IncludeStackTrace)
 	assert.False(t, cfg.OnlyConsole)
 	assert.Equal(t, 100, cfg.BatchSize)
 	assert.Equal(t, 5*time.Second, cfg.FlushInterval)
@@ -50,8 +49,6 @@ func TestConfigWithAllOptions(t *testing.T) {
 	assert.True(t, cfg.OnlyConsole)
 	assert.Equal(t, 200, cfg.BatchSize)
 	assert.Equal(t, 10*time.Second, cfg.FlushInterval)
-	// IncludeStackTrace, MaxRetries, Timeout are now hardcoded
-	assert.True(t, cfg.IncludeStackTrace)
 	assert.Equal(t, 3, cfg.MaxRetries)
 	assert.Equal(t, 10*time.Second, cfg.Timeout)
 }

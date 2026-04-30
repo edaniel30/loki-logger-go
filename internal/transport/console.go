@@ -21,15 +21,18 @@ const (
 	colorMagenta = "\033[35m" // Fatal
 )
 
+// stdoutMu serializes all writes to os.Stdout across every ConsoleTransport instance.
+// This prevents interleaved output when multiple instances write concurrently
+// (e.g. the logger's transport and an OnFlushErrorConsole callback).
+var stdoutMu sync.Mutex
+
 // ConsoleTransport writes log entries to stdout with colored output.
 // This is a minimal implementation with sensible defaults:
 // - Always writes to stdout
 // - Always includes timestamp
 // - Always includes colors
 // - Thread-safe for concurrent use
-type ConsoleTransport struct {
-	mu sync.Mutex
-}
+type ConsoleTransport struct{}
 
 // NewConsoleTransport creates a new console transport with default settings.
 func NewConsoleTransport() *ConsoleTransport {
@@ -41,8 +44,8 @@ func (ct *ConsoleTransport) Name() string {
 }
 
 func (ct *ConsoleTransport) Write(ctx context.Context, entries ...*types.Entry) error {
-	ct.mu.Lock()
-	defer ct.mu.Unlock()
+	stdoutMu.Lock()
+	defer stdoutMu.Unlock()
 
 	for _, entry := range entries {
 		formatted := ct.format(entry)
