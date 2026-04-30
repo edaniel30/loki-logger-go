@@ -4,12 +4,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/edaniel30/loki-logger-go/internal/transport"
 	"github.com/edaniel30/loki-logger-go/types"
 )
 
 // TraceIDExtractor is a function that extracts a trace ID from a context.
 // Return an empty string if no trace ID is present.
 type TraceIDExtractor func(ctx context.Context) string
+
+// OnFlushError is a callback invoked when a flush to Loki fails, including both
+// background periodic flushes and synchronous flushes triggered by Write when
+// the batch is full. It may be called concurrently and must be non-blocking.
+type OnFlushError func(err error)
 
 // Config holds the logger configuration.
 // Use DefaultConfig() to get sensible defaults, then customize with Option functions.
@@ -22,16 +28,20 @@ type Config struct {
 	// If the caller already includes "trace_id" in fields, it is not overwritten.
 	TraceIDExtractor TraceIDExtractor
 
+	// OnFlushError is an optional callback invoked whenever a flush to Loki fails,
+	// including both background periodic flushes and synchronous flushes triggered
+	// by Write when the batch is full. If nil, flush errors are silently discarded.
+	OnFlushError OnFlushError
+
 	// Loki connection
 	LokiHost     string // Loki server URL, e.g., "http://localhost:3100" (required if not OnlyConsole)
 	LokiUsername string // Username for basic auth (optional)
 	LokiPassword string // Password for basic auth (optional)
 
 	// Logging behavior
-	LogLevel          types.Level  // Minimum level to log (default: types.LevelInfo)
-	Labels            types.Labels // Default labels attached to all log entries
-	IncludeStackTrace bool         // Include stack trace in error and fatal logs (default: true)
-	OnlyConsole       bool         // Only log to console, skip Loki (default: false)
+	LogLevel    types.Level  // Minimum level to log (default: types.LevelInfo)
+	Labels      types.Labels // Default labels attached to all log entries
+	OnlyConsole bool         // Only log to console, skip Loki (default: false)
 
 	// Performance settings
 	BatchSize     int           // Number of logs to accumulate before sending to Loki (default: 100)
@@ -53,7 +63,6 @@ type Config struct {
 //   - AppEnv: "local"
 //   - LogLevel: LevelInfo
 //   - Labels: empty map
-//   - IncludeStackTrace: true
 //   - OnlyConsole: false (logs to both console and Loki)
 //   - BatchSize: 100
 //   - FlushInterval: 5 seconds
@@ -72,11 +81,10 @@ func DefaultConfig() *Config {
 		AppName:           "app",
 		AppVersion:        "1.0.0",
 		AppEnv:            "local",
-		LokiHost:          "http://localhost:3100",
-		LogLevel:          types.LevelInfo,
-		Labels:            make(types.Labels),
-		IncludeStackTrace: true,
-		OnlyConsole:       false,
+		LokiHost:    "http://localhost:3100",
+		LogLevel:    types.LevelInfo,
+		Labels:      make(types.Labels),
+		OnlyConsole: false,
 		BatchSize:         100,
 		FlushInterval:     5 * time.Second,
 		MaxRetries:        3,
@@ -222,6 +230,50 @@ func WithFlushInterval(interval time.Duration) Option {
 func WithTraceIDExtractor(fn TraceIDExtractor) Option {
 	return func(c *Config) {
 		c.TraceIDExtractor = fn
+	}
+}
+
+// WithOnFlushError sets a callback that is invoked whenever a flush to Loki fails,
+// including background periodic flushes and synchronous flushes triggered by Write.
+// The callback may be called concurrently and must not block.
+//
+// Example:
+//
+//	loki.WithOnFlushError(func(err error) {
+//		fmt.Fprintf(os.Stderr, "loki flush error: %v\n", err)
+//	})
+func WithOnFlushError(fn OnFlushError) Option {
+	return func(c *Config) {
+		c.OnFlushError = fn
+	}
+}
+
+// WithOnFlushErrorConsole sets a flush-error callback that writes the error to the console
+// transport using the same format as the rest of the logs. This is the recommended option
+// to surface Loki connectivity problems (wrong host, network unreachable) without any
+// external dependency.
+//
+// Example:
+//
+//	loki.WithOnFlushErrorConsole()
+func WithOnFlushErrorConsole() Option {
+	console := transport.NewConsoleTransport()
+	return func(c *Config) {
+		c.OnFlushError = func(err error) {
+			entry := &types.Entry{
+				Level:     types.LevelError,
+				Message:   "loki flush error: " + err.Error(),
+				Fields:    map[string]any{},
+				Timestamp: time.Now(),
+				Labels: types.Labels{
+					"app":         c.AppName,
+					"level":       types.LevelError.String(),
+					"version":     c.AppVersion,
+					"environment": c.AppEnv,
+				},
+			}
+			_ = console.Write(context.Background(), entry)
+		}
 	}
 }
 
