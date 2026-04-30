@@ -54,6 +54,7 @@ func (l *Logger) setupTransports() {
 			FlushInterval: l.config.FlushInterval,
 			MaxRetries:    l.config.MaxRetries,
 			Timeout:       l.config.Timeout,
+			OnFlushError:  l.config.OnFlushError,
 		})
 		l.transports = append(l.transports, lokiTransport)
 	}
@@ -122,8 +123,6 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		}
 	}
 
-	// Include stack trace automatically for error and fatal levels
-	// Stack traces are always enabled (hardcoded to true)
 	if level == types.LevelError || level == types.LevelFatal {
 		stack := string(debug.Stack())
 		message = fmt.Sprintf("%s\n\nStack trace:\n%s", message, stack)

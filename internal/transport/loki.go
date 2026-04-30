@@ -10,6 +10,7 @@ import (
 	"github.com/edaniel30/loki-logger-go/types"
 )
 
+
 // LokiTransport sends log entries to a Grafana Loki server.
 // It batches entries for efficiency and flushes periodically.
 type LokiTransport struct {
@@ -18,6 +19,7 @@ type LokiTransport struct {
 	batchSize     int
 	flushInterval time.Duration
 	timeout       time.Duration
+	onFlushError  func(error)
 	mu            sync.Mutex
 	stopCh        chan struct{}
 	doneCh        chan struct{} // signals when background flusher is done
@@ -45,6 +47,12 @@ type LokiTransportConfig struct {
 
 	// Timeout is the timeout for all operations (HTTP requests, flush, shutdown)
 	Timeout time.Duration
+
+	// OnFlushError is an optional callback invoked when a flush fails,
+	// including both background periodic flushes and synchronous flushes
+	// triggered by Write. If nil, flush errors are silently discarded.
+	// The callback may be invoked concurrently and must be non-blocking.
+	OnFlushError func(error)
 }
 
 // NewLokiTransport creates a new Loki transport with the given configuration.
@@ -55,6 +63,7 @@ func NewLokiTransport(config *LokiTransportConfig) *LokiTransport {
 		batchSize:     config.BatchSize,
 		flushInterval: config.FlushInterval,
 		timeout:       config.Timeout,
+		onFlushError:  config.OnFlushError,
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 	}
@@ -99,7 +108,11 @@ func (lt *LokiTransport) Flush(ctx context.Context) error {
 
 	// Send to Loki - no conversion needed, both use types.Entry
 	if err := lt.client.Push(ctx, toSend); err != nil {
-		return fmt.Errorf("failed to push to Loki: %w", err)
+		err = fmt.Errorf("failed to push to Loki: %w", err)
+		if lt.onFlushError != nil {
+			lt.onFlushError(err)
+		}
+		return err
 	}
 
 	return nil
@@ -136,7 +149,7 @@ func (lt *LokiTransport) backgroundFlusher() {
 	doFlush := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), lt.timeout)
 		defer cancel()
-		_ = lt.Flush(ctx) // Ignore errors in background flush
+		_ = lt.Flush(ctx) // errors reported via onFlushError callback inside Flush
 	}
 
 	for {
