@@ -112,6 +112,8 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		}
 	}
 
+	fields = redactFields(fields)
+
 	// Automatically add caller information (file and line) if not already present
 	// Uses utils.GetCaller() to dynamically find the first caller outside the logger package
 	if file, line, ok := utils.GetCaller(); ok {
