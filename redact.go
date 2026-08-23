@@ -57,7 +57,7 @@ func redactAny(v any) any {
 		return redactMap(rv)
 	case reflect.Slice, reflect.Array:
 		return redactSlice(rv)
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
 			return v
 		}
