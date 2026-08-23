@@ -1,6 +1,7 @@
 package loki
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -26,6 +27,7 @@ var sensitiveKeyTerms = []string{
 	"authorization",
 	"cookie",
 	"signature",
+	"user_id",
 }
 
 // maskRunLength is the fixed number of mask characters used regardless of
@@ -51,7 +53,7 @@ func redactFields(fields map[string]any) map[string]any {
 
 func redactAny(v any) any {
 	rv := reflect.ValueOf(v)
-	//exhaustive:ignore // only Map/Slice/Array/Ptr/Interface need special handling; default covers all other kinds
+	//exhaustive:ignore // only Map/Slice/Array/Ptr/Interface/String need special handling; default covers all other kinds
 	switch rv.Kind() {
 	case reflect.Map:
 		return redactMap(rv)
@@ -62,9 +64,35 @@ func redactAny(v any) any {
 			return v
 		}
 		return redactAny(rv.Elem().Interface())
+	case reflect.String:
+		return redactJSONString(v.(string))
 	default:
 		return v
 	}
+}
+
+// redactJSONString handles fields that carry an entire JSON document encoded
+// as a string (e.g. a raw webhook payload logged as raw_payload: "{...}").
+// Without this, sensitive keys inside that string are invisible to the
+// key-based walk above, since the whole thing looks like one opaque string
+// value. Non-JSON strings are returned unchanged.
+func redactJSONString(s string) string {
+	trimmed := strings.TrimSpace(s)
+	if len(trimmed) == 0 || (trimmed[0] != '{' && trimmed[0] != '[') {
+		return s
+	}
+
+	var decoded any
+	if err := json.Unmarshal([]byte(s), &decoded); err != nil {
+		return s
+	}
+
+	redactedJSON, err := json.Marshal(redactAny(decoded))
+	if err != nil {
+		return s
+	}
+
+	return string(redactedJSON)
 }
 
 func redactMap(rv reflect.Value) any {

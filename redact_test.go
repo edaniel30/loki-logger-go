@@ -1,9 +1,11 @@
 package loki
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaskString(t *testing.T) {
@@ -123,4 +125,50 @@ func TestRedactFields_DoesNotMutateOriginal(t *testing.T) {
 	original := map[string]any{"phone": "+5215512345678"}
 	_ = redactFields(original)
 	assert.Equal(t, "+5215512345678", original["phone"])
+}
+
+func TestRedactFields_JSONEncodedStringValue(t *testing.T) {
+	// Mirrors a real production log: the whole webhook body is logged as a
+	// single JSON-encoded string under a key that isn't itself sensitive
+	// (raw_payload), so the key-based walk alone never sees "name",
+	// "text.body", "user_id", etc. living inside that string.
+	rawPayload := `{"messaging_product":"whatsapp","metadata":{"display_phone_number":"573212418580","phone_number_id":"1304723552721923"},"contacts":[{"profile":{"name":"Majo","username":"mariahormazab"},"user_id":"CO.1942991563042707"}],"messages":[{"from_user_id":"CO.1942991563042707","id":"wamid.ABC123","timestamp":"1787524845","text":{"body":"secret message"},"type":"text"}]}`
+
+	out := redactFields(map[string]any{
+		"event_id":    "54dc8e97",
+		"raw_payload": rawPayload,
+	})
+
+	assert.Equal(t, "54dc8e97", out["event_id"])
+
+	var redactedPayload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out["raw_payload"].(string)), &redactedPayload))
+
+	metadata := redactedPayload["metadata"].(map[string]any)
+	assert.Equal(t, "5***0", metadata["display_phone_number"])
+	assert.Equal(t, "1***3", metadata["phone_number_id"])
+
+	contacts := redactedPayload["contacts"].([]any)
+	contact := contacts[0].(map[string]any)
+	assert.Equal(t, "C***7", contact["user_id"])
+	profile := contact["profile"].(map[string]any)
+	assert.Equal(t, "M***o", profile["name"])
+	assert.Equal(t, "m***b", profile["username"]) // "username" also contains "name"
+
+	messages := redactedPayload["messages"].([]any)
+	msg := messages[0].(map[string]any)
+	assert.Equal(t, "C***7", msg["from_user_id"])
+	assert.Equal(t, "wamid.ABC123", msg["id"]) // not a sensitive key
+	text := msg["text"].(map[string]any)
+	assert.Equal(t, "s***e", text["body"])
+}
+
+func TestRedactJSONString_NonJSONStringUnchanged(t *testing.T) {
+	out := redactFields(map[string]any{"status": "delivered"})
+	assert.Equal(t, "delivered", out["status"])
+}
+
+func TestRedactJSONString_InvalidJSONLookingStringUnchanged(t *testing.T) {
+	out := redactFields(map[string]any{"note": "{not valid json"})
+	assert.Equal(t, "{not valid json", out["note"])
 }
