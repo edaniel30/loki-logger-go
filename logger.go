@@ -55,6 +55,7 @@ func (l *Logger) setupTransports() {
 			MaxRetries:    l.config.MaxRetries,
 			Timeout:       l.config.Timeout,
 			OnFlushError:  l.config.OnFlushError,
+			Headers:       l.config.LokiHeaders,
 		})
 		l.transports = append(l.transports, lokiTransport)
 	}

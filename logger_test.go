@@ -17,15 +17,15 @@ import (
 
 func newTestConfig() *Config {
 	return &Config{
-		AppName:           "test-app",
-		AppVersion:        "1.0.0",
-		AppEnv:            "local",
-		OnlyConsole: true,
-		BatchSize:   100,
-		FlushInterval:     5 * time.Second,
-		MaxRetries:        3,
-		Timeout:           10 * time.Second,
-		Labels:            make(types.Labels),
+		AppName:       "test-app",
+		AppVersion:    "1.0.0",
+		AppEnv:        "local",
+		OnlyConsole:   true,
+		BatchSize:     100,
+		FlushInterval: 5 * time.Second,
+		MaxRetries:    3,
+		Timeout:       10 * time.Second,
+		Labels:        make(types.Labels),
 	}
 }
 
@@ -306,7 +306,7 @@ func TestLoggerWithLabels(t *testing.T) {
 	// System labels (reserved, cannot be overridden)
 	assert.Equal(t, "test-app", entries[0].Labels["app"])
 	assert.Equal(t, "info", entries[0].Labels["level"])
-	assert.Equal(t, "1.0.0", entries[0].Labels["version"]) // default value
+	assert.Equal(t, "1.0.0", entries[0].Labels["version"])     // default value
 	assert.Equal(t, "local", entries[0].Labels["environment"]) // default value
 
 	cfg = newTestConfig()

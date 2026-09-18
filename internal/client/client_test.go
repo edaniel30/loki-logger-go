@@ -14,7 +14,7 @@ import (
 )
 
 func TestClient_formatLogLine(t *testing.T) {
-	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3)
+	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3, nil)
 
 	entry := &types.Entry{
 		Level:   types.LevelInfo,
@@ -52,7 +52,7 @@ func TestClient_formatLogLine(t *testing.T) {
 }
 
 func TestClient_labelsToKey(t *testing.T) {
-	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3)
+	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3, nil)
 
 	assert.Equal(t, "", c.labelsToKey(types.Labels{}))
 	assert.Equal(t, "env=prod;", c.labelsToKey(types.Labels{"env": "prod"}))
@@ -70,7 +70,7 @@ func TestClient_labelsToKey(t *testing.T) {
 }
 
 func TestClient_buildPayload(t *testing.T) {
-	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3)
+	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3, nil)
 
 	payload, err := c.buildPayload([]*types.Entry{})
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestClient_buildPayload(t *testing.T) {
 }
 
 func TestClient_Push(t *testing.T) {
-	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3)
+	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3, nil)
 	err := c.Push(context.Background(), []*types.Entry{})
 	assert.NoError(t, err)
 }
@@ -160,7 +160,7 @@ func TestClient_send(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, "", "", 10*time.Second, 3)
+	c := NewClient(server.URL, "", "", 10*time.Second, 3, nil)
 	err := c.send(context.Background(), []byte(`{"test":"data"}`))
 	assert.NoError(t, err)
 
@@ -174,7 +174,7 @@ func TestClient_send(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c = NewClient(server.URL, "user", "pass", 10*time.Second, 3)
+	c = NewClient(server.URL, "user", "pass", 10*time.Second, 3, nil)
 	err = c.send(context.Background(), []byte(`{"test":"data"}`))
 	assert.NoError(t, err)
 
@@ -185,7 +185,7 @@ func TestClient_send(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c = NewClient(server.URL, "", "", 10*time.Second, 3)
+	c = NewClient(server.URL, "", "", 10*time.Second, 3, nil)
 	err = c.send(context.Background(), []byte(`{"test":"data"}`))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "500")
@@ -199,7 +199,7 @@ func TestClient_sendWithRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, "", "", 10*time.Second, 3)
+	c := NewClient(server.URL, "", "", 10*time.Second, 3, nil)
 	err := c.sendWithRetry(context.Background(), []byte(`{"test":"data"}`))
 	assert.NoError(t, err)
 
@@ -215,7 +215,7 @@ func TestClient_sendWithRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c = NewClient(server.URL, "", "", 10*time.Second, 3)
+	c = NewClient(server.URL, "", "", 10*time.Second, 3, nil)
 	err = c.sendWithRetry(context.Background(), []byte(`{"test":"data"}`))
 	assert.NoError(t, err)
 	assert.Equal(t, 3, attempts)
@@ -226,7 +226,7 @@ func TestClient_sendWithRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c = NewClient(server.URL, "", "", 10*time.Second, 2)
+	c = NewClient(server.URL, "", "", 10*time.Second, 2, nil)
 	err = c.sendWithRetry(context.Background(), []byte(`{"test":"data"}`))
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed after 2 retries")
