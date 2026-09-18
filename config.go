@@ -34,9 +34,10 @@ type Config struct {
 	OnFlushError OnFlushError
 
 	// Loki connection
-	LokiHost     string // Loki server URL, e.g., "http://localhost:3100" (required if not OnlyConsole)
-	LokiUsername string // Username for basic auth (optional)
-	LokiPassword string // Password for basic auth (optional)
+	LokiHost     string            // Loki server URL, e.g., "http://localhost:3100" (required if not OnlyConsole)
+	LokiUsername string            // Username for basic auth (optional)
+	LokiPassword string            // Password for basic auth (optional)
+	LokiHeaders  map[string]string // Loki Headers (optional)
 
 	// Logging behavior
 	LogLevel    types.Level  // Minimum level to log (default: types.LevelInfo)
@@ -78,18 +79,19 @@ type Config struct {
 //	)
 func DefaultConfig() *Config {
 	return &Config{
-		AppName:           "app",
-		AppVersion:        "1.0.0",
-		AppEnv:            "local",
-		LokiHost:    "http://localhost:3100",
-		LogLevel:    types.LevelInfo,
-		Labels:      make(types.Labels),
-		OnlyConsole: false,
-		BatchSize:         100,
-		FlushInterval:     5 * time.Second,
-		MaxRetries:        3,
-		Timeout:           10 * time.Second,
-		TraceIDExtractor:  nil,
+		AppName:          "app",
+		AppVersion:       "1.0.0",
+		AppEnv:           "local",
+		LokiHost:         "http://localhost:3100",
+		LokiHeaders:      map[string]string{},
+		LogLevel:         types.LevelInfo,
+		Labels:           make(types.Labels),
+		OnlyConsole:      false,
+		BatchSize:        100,
+		FlushInterval:    5 * time.Second,
+		MaxRetries:       3,
+		Timeout:          10 * time.Second,
+		TraceIDExtractor: nil,
 	}
 }
 
@@ -151,6 +153,17 @@ func WithLokiBasicAuth(username, password string) Option {
 	return func(c *Config) {
 		c.LokiUsername = username
 		c.LokiPassword = password
+	}
+}
+
+// WithLokiHeader sets header key/value pair for the connection.
+//
+// Example:
+//
+//	loki.WithLokiHeader("X-Scope-OrgID", "foo")
+func WithLokiHeader(headerKey, headerValue string) Option {
+	return func(c *Config) {
+		c.LokiHeaders[headerKey] = headerValue
 	}
 }
 

@@ -34,10 +34,11 @@ type Client struct {
 	password   string
 	httpClient *http.Client
 	maxRetries int
+	headers    map[string]string
 }
 
 // NewClient creates a new Loki HTTP client.
-func NewClient(baseURL string, username string, password string, timeout time.Duration, maxRetries int) *Client {
+func NewClient(baseURL string, username string, password string, timeout time.Duration, maxRetries int, headers map[string]string) *Client {
 	return &Client{
 		baseURL:  baseURL,
 		username: username,
@@ -46,6 +47,7 @@ func NewClient(baseURL string, username string, password string, timeout time.Du
 			Timeout: timeout,
 		},
 		maxRetries: maxRetries,
+		headers:    headers,
 	}
 }
 
@@ -195,6 +197,9 @@ func (c *Client) send(ctx context.Context, payload []byte) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	for header := range c.headers {
+		req.Header.Set(header, c.headers[header])
+	}
 
 	// Add basic auth if credentials are provided
 	if c.username != "" && c.password != "" {

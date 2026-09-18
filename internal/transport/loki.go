@@ -52,12 +52,15 @@ type LokiTransportConfig struct {
 	// triggered by Write. If nil, flush errors are silently discarded.
 	// The callback may be invoked concurrently and must be non-blocking.
 	OnFlushError func(error)
+
+	// Custom headers for the underlying connection to the Loki server
+	Headers map[string]string
 }
 
 // NewLokiTransport creates a new Loki transport with the given configuration.
 func NewLokiTransport(config *LokiTransportConfig) *LokiTransport {
 	lt := &LokiTransport{
-		client:        client.NewClient(config.LokiURL, config.LokiUsername, config.LokiPassword, config.Timeout, config.MaxRetries),
+		client:        client.NewClient(config.LokiURL, config.LokiUsername, config.LokiPassword, config.Timeout, config.MaxRetries, config.Headers),
 		buffer:        make([]*types.Entry, 0, config.BatchSize),
 		batchSize:     config.BatchSize,
 		flushInterval: config.FlushInterval,
