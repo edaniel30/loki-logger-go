@@ -5,7 +5,7 @@ on:
     branches: [main, develop]
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26.11" # a patched Go: govulncheck fails on known standard library vulnerabilities
   COVERAGE_THRESHOLD: 90
 
 jobs:
