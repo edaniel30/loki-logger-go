@@ -7,13 +7,16 @@ import (
 	"strings"
 )
 
-// sensitiveKeyTerms are substrings that mark a field key as sensitive. A key
+// defaultRedactKeys are substrings that mark a field key as sensitive. A key
 // is redacted if its lowercased form contains any of these terms, so e.g.
 // "phone" alone also catches "display_phone_number" and "phone_number_id"
 // without listing every variant. Matching applies at any depth inside nested
 // maps and slices (e.g. an HTTP header map or a JSON request body
 // unmarshalled into map[string]any).
-var sensitiveKeyTerms = []string{
+//
+// Add terms with WithRedactKeys; exempt exact keys that contain a term but
+// are not sensitive (e.g. "app_name" contains "name") with WithKeepKeys.
+var defaultRedactKeys = []string{
 	"phone",
 	"wa_id",
 	"from",
@@ -36,47 +39,80 @@ const maskRunLength = 3
 
 const maskChar = "*"
 
-// redactFields returns a copy of fields with the values of sensitive keys
-// masked, keeping only the first and last character of each string value.
-// Nested maps and slices (of any concrete type, e.g. map[string][]string
-// from http.Header) are walked recursively.
-func redactFields(fields map[string]any) map[string]any {
+// redactor masks the values of sensitive keys in log fields.
+type redactor struct {
+	// terms mark a key as sensitive when the lowercased key contains one
+	terms []string
+	// keep are lowercased keys that are never redacted, even when they
+	// contain a term: they match the whole key, not a part of it
+	keep map[string]bool
+}
+
+// newRedactor builds a redactor from defaultRedactKeys plus extraTerms, with
+// keepKeys exempted. Terms and keys are case-insensitive; blank ones are
+// ignored.
+func newRedactor(extraTerms, keepKeys []string) *redactor {
+	r := &redactor{keep: make(map[string]bool, len(keepKeys))}
+	seen := make(map[string]bool)
+	for _, term := range append(append([]string{}, defaultRedactKeys...), extraTerms...) {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term == "" || seen[term] {
+			continue
+		}
+		seen[term] = true
+		r.terms = append(r.terms, term)
+	}
+	for _, key := range keepKeys {
+		if key = strings.ToLower(strings.TrimSpace(key)); key != "" {
+			r.keep[key] = true
+		}
+	}
+	return r
+}
+
+// fields returns a copy of fields with the values of sensitive keys masked,
+// keeping only the first and last character of each string value. Nested
+// maps and slices (of any concrete type, e.g. map[string][]string from
+// http.Header) are walked recursively.
+func (r *redactor) fields(fields map[string]any) map[string]any {
 	if fields == nil {
 		return nil
 	}
-	redacted, ok := redactAny(fields).(map[string]any)
+	redacted, ok := r.value(fields).(map[string]any)
 	if !ok {
 		return fields
 	}
 	return redacted
 }
 
-func redactAny(v any) any {
+func (r *redactor) value(v any) any {
 	rv := reflect.ValueOf(v)
-	//exhaustive:ignore // only Map/Slice/Array/Ptr/Interface/String need special handling; default covers all other kinds
+	// Only Map/Slice/Array/Ptr/Interface/String need special handling; the
+	// default covers every other kind
+	//exhaustive:ignore
 	switch rv.Kind() {
 	case reflect.Map:
-		return redactMap(rv)
+		return r.mapValue(rv)
 	case reflect.Slice, reflect.Array:
-		return redactSlice(rv)
+		return r.slice(rv)
 	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
 			return v
 		}
-		return redactAny(rv.Elem().Interface())
+		return r.value(rv.Elem().Interface())
 	case reflect.String:
-		return redactJSONString(v.(string))
+		return r.jsonString(v.(string))
 	default:
 		return v
 	}
 }
 
-// redactJSONString handles fields that carry an entire JSON document encoded
-// as a string (e.g. a raw webhook payload logged as raw_payload: "{...}").
+// jsonString handles fields that carry an entire JSON document encoded as a
+// string (e.g. a raw webhook payload logged as raw_payload: "{...}").
 // Without this, sensitive keys inside that string are invisible to the
 // key-based walk above, since the whole thing looks like one opaque string
 // value. Non-JSON strings are returned unchanged.
-func redactJSONString(s string) string {
+func (r *redactor) jsonString(s string) string {
 	trimmed := strings.TrimSpace(s)
 	if len(trimmed) == 0 || (trimmed[0] != '{' && trimmed[0] != '[') {
 		return s
@@ -87,7 +123,7 @@ func redactJSONString(s string) string {
 		return s
 	}
 
-	redactedJSON, err := json.Marshal(redactAny(decoded))
+	redactedJSON, err := json.Marshal(r.value(decoded))
 	if err != nil {
 		return s
 	}
@@ -95,34 +131,34 @@ func redactJSONString(s string) string {
 	return string(redactedJSON)
 }
 
-func redactMap(rv reflect.Value) any {
+func (r *redactor) mapValue(rv reflect.Value) any {
 	out := make(map[string]any, rv.Len())
 	iter := rv.MapRange()
 	for iter.Next() {
 		key := fmt.Sprintf("%v", iter.Key().Interface())
 		value := iter.Value().Interface()
-		if isSensitiveKey(key) {
-			out[key] = redactLeaf(value)
+		if r.isSensitive(key) {
+			out[key] = r.leaf(value)
 			continue
 		}
-		out[key] = redactAny(value)
+		out[key] = r.value(value)
 	}
 	return out
 }
 
-func redactSlice(rv reflect.Value) any {
+func (r *redactor) slice(rv reflect.Value) any {
 	out := make([]any, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
-		out[i] = redactAny(rv.Index(i).Interface())
+		out[i] = r.value(rv.Index(i).Interface())
 	}
 	return out
 }
 
-// redactLeaf masks string values directly. A slice/array under a sensitive
-// key (e.g. http.Header's []string values) has each string element masked.
-// Any other structured value (e.g. a nested map) is walked normally instead
-// of being blanket-masked, so sensitive keys further down are still caught.
-func redactLeaf(v any) any {
+// leaf masks string values directly. A slice/array under a sensitive key
+// (e.g. http.Header's []string values) has each string element masked. Any
+// other structured value (e.g. a nested map) is walked normally instead of
+// being blanket-masked, so sensitive keys further down are still caught.
+func (r *redactor) leaf(v any) any {
 	if s, ok := v.(string); ok {
 		return maskString(s)
 	}
@@ -131,17 +167,23 @@ func redactLeaf(v any) any {
 	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
 		out := make([]any, rv.Len())
 		for i := 0; i < rv.Len(); i++ {
-			out[i] = redactLeaf(rv.Index(i).Interface())
+			out[i] = r.leaf(rv.Index(i).Interface())
 		}
 		return out
 	}
 
-	return redactAny(v)
+	return r.value(v)
 }
 
-func isSensitiveKey(key string) bool {
+// isSensitive reports whether a key's value must be masked: it contains a
+// term and is not one of the kept keys. A kept key is still walked, so
+// sensitive keys nested under it are masked.
+func (r *redactor) isSensitive(key string) bool {
 	lower := strings.ToLower(key)
-	for _, term := range sensitiveKeyTerms {
+	if r.keep[lower] {
+		return false
+	}
+	for _, term := range r.terms {
 		if strings.Contains(lower, term) {
 			return true
 		}

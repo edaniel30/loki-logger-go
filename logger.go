@@ -16,6 +16,7 @@ import (
 
 type Logger struct {
 	config     Config
+	redactor   *redactor
 	transports []transport.Transport
 	mu         sync.RWMutex
 }
@@ -31,6 +32,7 @@ func New(config *Config, opts ...Option) (*Logger, error) {
 
 	logger := &Logger{
 		config:     *config,
+		redactor:   newRedactor(config.RedactKeys, config.KeepKeys),
 		transports: make([]transport.Transport, 0),
 	}
 
@@ -112,7 +114,7 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		}
 	}
 
-	fields = redactFields(fields)
+	fields = l.redactor.fields(fields)
 
 	// Automatically add caller information (file and line) if not already present
 	// Uses utils.GetCaller() to dynamically find the first caller outside the logger package
@@ -219,6 +221,7 @@ func (l *Logger) WithLabels(labels types.Labels) *Logger {
 	// Share transports with parent logger (they are thread-safe and designed to be shared)
 	newLogger := &Logger{
 		config:     newConfig,
+		redactor:   l.redactor,   // Read-only after New: safe to share
 		transports: l.transports, // Shared (thread-safe)
 	}
 

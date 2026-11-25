@@ -8,6 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// defaultRedactor redacts with the default terms only, as a logger without
+// WithRedactKeys or WithKeepKeys does.
+var defaultRedactor = newRedactor(nil, nil)
+
 func TestMaskString(t *testing.T) {
 	tests := []struct {
 		name string
@@ -29,20 +33,20 @@ func TestMaskString(t *testing.T) {
 }
 
 func TestIsSensitiveKey(t *testing.T) {
-	assert.True(t, isSensitiveKey("phone"))
-	assert.True(t, isSensitiveKey("Phone"))
-	assert.True(t, isSensitiveKey("AUTHORIZATION"))
-	assert.True(t, isSensitiveKey("X-Hub-Signature-256"))
-	assert.False(t, isSensitiveKey("event_id"))
-	assert.False(t, isSensitiveKey("status"))
+	assert.True(t, defaultRedactor.isSensitive("phone"))
+	assert.True(t, defaultRedactor.isSensitive("Phone"))
+	assert.True(t, defaultRedactor.isSensitive("AUTHORIZATION"))
+	assert.True(t, defaultRedactor.isSensitive("X-Hub-Signature-256"))
+	assert.False(t, defaultRedactor.isSensitive("event_id"))
+	assert.False(t, defaultRedactor.isSensitive("status"))
 }
 
 func TestRedactFields_Nil(t *testing.T) {
-	assert.Nil(t, redactFields(nil))
+	assert.Nil(t, defaultRedactor.fields(nil))
 }
 
 func TestRedactFields_TopLevelString(t *testing.T) {
-	out := redactFields(map[string]any{
+	out := defaultRedactor.fields(map[string]any{
 		"phone":  "+5215512345678",
 		"status": "delivered",
 	})
@@ -74,7 +78,7 @@ func TestRedactFields_NestedMap(t *testing.T) {
 		},
 	}
 
-	out := redactFields(map[string]any{"body": body})
+	out := defaultRedactor.fields(map[string]any{"body": body})
 	redactedBody := out["body"].(map[string]any)
 
 	assert.Equal(t, "whatsapp", redactedBody["messaging_product"])
@@ -104,7 +108,7 @@ func TestRedactFields_HTTPHeaderShape(t *testing.T) {
 		"Content-Type":  {"application/json"},
 	}
 
-	out := redactFields(map[string]any{"headers": headers})
+	out := defaultRedactor.fields(map[string]any{"headers": headers})
 	redactedHeaders := out["headers"].(map[string]any)
 
 	auth := redactedHeaders["Authorization"].([]any)
@@ -117,13 +121,13 @@ func TestRedactFields_HTTPHeaderShape(t *testing.T) {
 func TestRedactFields_NonStringLeafUnderSensitiveKey(t *testing.T) {
 	// "to" is sensitive but here its value is a number; masking only
 	// applies to strings, so it should pass through unchanged.
-	out := redactFields(map[string]any{"to": 12345})
+	out := defaultRedactor.fields(map[string]any{"to": 12345})
 	assert.Equal(t, 12345, out["to"])
 }
 
 func TestRedactFields_DoesNotMutateOriginal(t *testing.T) {
 	original := map[string]any{"phone": "+5215512345678"}
-	_ = redactFields(original)
+	_ = defaultRedactor.fields(original)
 	assert.Equal(t, "+5215512345678", original["phone"])
 }
 
@@ -134,7 +138,7 @@ func TestRedactFields_JSONEncodedStringValue(t *testing.T) {
 	// "text.body", "user_id", etc. living inside that string.
 	rawPayload := `{"messaging_product":"whatsapp","metadata":{"display_phone_number":"573212418580","phone_number_id":"1304723552721923"},"contacts":[{"profile":{"name":"Majo","username":"mariahormazab"},"user_id":"CO.1942991563042707"}],"messages":[{"from_user_id":"CO.1942991563042707","id":"wamid.ABC123","timestamp":"1787524845","text":{"body":"secret message"},"type":"text"}]}`
 
-	out := redactFields(map[string]any{
+	out := defaultRedactor.fields(map[string]any{
 		"event_id":    "54dc8e97",
 		"raw_payload": rawPayload,
 	})
@@ -164,11 +168,78 @@ func TestRedactFields_JSONEncodedStringValue(t *testing.T) {
 }
 
 func TestRedactJSONString_NonJSONStringUnchanged(t *testing.T) {
-	out := redactFields(map[string]any{"status": "delivered"})
+	out := defaultRedactor.fields(map[string]any{"status": "delivered"})
 	assert.Equal(t, "delivered", out["status"])
 }
 
 func TestRedactJSONString_InvalidJSONLookingStringUnchanged(t *testing.T) {
-	out := redactFields(map[string]any{"note": "{not valid json"})
+	out := defaultRedactor.fields(map[string]any{"note": "{not valid json"})
 	assert.Equal(t, "{not valid json", out["note"])
+}
+
+func TestRedactor_ExtraTerms(t *testing.T) {
+	r := newRedactor([]string{" Alias ", "", "document_number", "name"}, nil)
+	out := r.fields(map[string]any{
+		"alias":           "ana.perez",
+		"user_alias":      "ana.perez",
+		"document_number": "1234567890",
+		"status":          "active",
+	})
+	assert.Equal(t, "a***z", out["alias"], "terms are trimmed and case-insensitive")
+	assert.Equal(t, "a***z", out["user_alias"], "an added term matches inside keys like the default ones")
+	assert.Equal(t, "1***0", out["document_number"])
+	assert.Equal(t, "active", out["status"])
+	assert.Len(t, r.terms, len(defaultRedactKeys)+2, "blank and repeated terms are dropped")
+}
+
+func TestRedactor_KeepKeys(t *testing.T) {
+	r := newRedactor(nil, []string{"App_Name", " service_name ", ""})
+	out := r.fields(map[string]any{
+		"app_name":      "guardian",
+		"APP_NAME":      "guardian",
+		"service_name":  "notifier",
+		"user_app_name": "crm",
+		"name":          "Ana Pérez",
+		"event": map[string]any{
+			"app_name": "crm",
+			"actor":    map[string]any{"name": "Ana Pérez"},
+		},
+	})
+	assert.Equal(t, "guardian", out["app_name"])
+	assert.Equal(t, "guardian", out["APP_NAME"], "kept keys match in any case")
+	assert.Equal(t, "notifier", out["service_name"])
+	assert.Equal(t, "c***m", out["user_app_name"], "only the whole key is kept, not keys that contain it")
+	assert.Equal(t, "A***z", out["name"])
+	event := out["event"].(map[string]any)
+	assert.Equal(t, "crm", event["app_name"], "kept at any depth")
+	assert.Equal(t, "A***z", event["actor"].(map[string]any)["name"])
+}
+
+func TestRedactor_KeptKeyIsStillWalked(t *testing.T) {
+	r := newRedactor(nil, []string{"request_body"})
+	out := r.fields(map[string]any{
+		"request_body": map[string]any{"email": "ana@example.com", "plan": "pro"},
+	})
+	body := out["request_body"].(map[string]any)
+	assert.Equal(t, "a***m", body["email"], "a sensitive key under a kept key is still masked")
+	assert.Equal(t, "pro", body["plan"])
+}
+
+func TestNew_RedactionOptions(t *testing.T) {
+	logger, err := New(DefaultConfig(),
+		WithOnlyConsole(true),
+		WithRedactKeys("alias"),
+		WithRedactKeys("document"),
+		WithKeepKeys("app_name"),
+	)
+	require.NoError(t, err)
+	defer func() { _ = logger.Close() }()
+
+	assert.True(t, logger.redactor.isSensitive("alias"))
+	assert.True(t, logger.redactor.isSensitive("document_type"), "calls add up")
+	assert.False(t, logger.redactor.isSensitive("app_name"))
+	assert.True(t, logger.redactor.isSensitive("name"), "the defaults stay")
+
+	child := logger.WithLabels(map[string]string{"component": "auth"})
+	assert.Same(t, logger.redactor, child.redactor, "loggers with extra labels redact the same way")
 }

@@ -141,6 +141,10 @@ Since `app`, `level`, `version`, and `environment` are automatically added as la
 {app="my-service", environment="production", component="api"}
 ```
 
+## Sensitive Data
+
+Values of fields whose key contains a sensitive term (`name`, `email`, `phone`, `password`, `token`, `secret`, `key`, `authorization`, `cookie`, `user_id`, ...) are masked before they leave the process: `"Ana Pérez"` → `"A***z"`. Add terms with `WithRedactKeys("alias")`, and keep keys that contain a term but are not sensitive with `WithKeepKeys("app_name", "service_name")`. See [docs/configuration.md](docs/configuration.md#redacting-sensitive-fields).
+
 ## Performance
 
 - **Buffer pooling** reduces memory allocations (up to 256KB buffers)
