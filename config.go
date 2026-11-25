@@ -51,6 +51,13 @@ type Config struct {
 
 	AppVersion string // Version of the application (default: "1.0.0")
 	AppEnv     string // Environment of the application (default: "local")
+
+	// Redaction of sensitive field values (see WithRedactKeys, WithKeepKeys).
+	// RedactKeys are terms added to the default ones: a field whose key
+	// contains a term (case-insensitive) has its value masked. KeepKeys are
+	// whole keys never masked even if they contain a term, e.g. "app_name".
+	RedactKeys []string
+	KeepKeys   []string
 }
 
 // DefaultConfig returns a Config with sensible default values.
@@ -217,6 +224,36 @@ func WithBatchSize(size int) Option {
 func WithFlushInterval(interval time.Duration) Option {
 	return func(c *Config) {
 		c.FlushInterval = interval
+	}
+}
+
+// WithRedactKeys adds terms to the default sensitive ones (phone, wa_id, from,
+// body, name, email, password, token, secret, key, authorization, cookie,
+// signature, user_id). A field whose key contains a term, at any depth and
+// in any case, has its string values masked to their first and last
+// character ("Ana Pérez" -> "A***z"). Calls add up.
+//
+// Example:
+//
+//	loki.WithRedactKeys("alias", "document_number")
+func WithRedactKeys(terms ...string) Option {
+	return func(c *Config) {
+		c.RedactKeys = append(c.RedactKeys, terms...)
+	}
+}
+
+// WithKeepKeys exempts whole keys from redaction although they contain a
+// sensitive term, e.g. "app_name" and "service_name" contain "name". The
+// match is the whole key, in any case: "app_name" does not exempt
+// "user_app_name". Values nested under a kept key are still checked. Calls
+// add up.
+//
+// Example:
+//
+//	loki.WithKeepKeys("app_name", "service_name")
+func WithKeepKeys(keys ...string) Option {
+	return func(c *Config) {
+		c.KeepKeys = append(c.KeepKeys, keys...)
 	}
 }
 

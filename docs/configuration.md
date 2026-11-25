@@ -145,6 +145,33 @@ The `trace_id` field is only added when:
 2. The extractor returns a non-empty string.
 3. The caller has **not** already set `"trace_id"` in the fields map.
 
+### Redacting Sensitive Fields
+
+Before a log entry is written (console and Loki), the value of every field whose key **contains** a sensitive term is masked to its first and last character: `"Ana Pérez"` → `"A***z"`. Matching ignores case and applies at any depth: nested maps, slices, and strings that hold a JSON document.
+
+Default terms: `phone`, `wa_id`, `from`, `body`, `name`, `email`, `password`, `token`, `secret`, `key`, `authorization`, `cookie`, `signature`, `user_id`.
+
+Two options adjust them:
+
+- `WithRedactKeys(terms...)` adds terms. Like the defaults, a term matches inside keys: `"alias"` also masks `user_alias`.
+- `WithKeepKeys(keys...)` exempts whole keys that contain a term but are not sensitive. `"app_name"` contains `name`, so it is masked unless it is kept. A kept key matches the whole key only (`"app_name"` does not exempt `user_app_name`), at any depth. Values nested under a kept key are still checked.
+
+```go
+logger, _ := loki.New(loki.DefaultConfig(),
+    loki.WithAppName("guardian"),
+    loki.WithRedactKeys("alias"),                    // also mask aliases
+    loki.WithKeepKeys("app_name", "service_name"),   // readable: not personal data
+)
+
+logger.Info(ctx, "user created", map[string]any{
+    "app_name": "crm",       // kept: "crm"
+    "name":     "Ana Pérez", // masked: "A***z"
+    "alias":    "ana.perez", // masked: "a***z"
+})
+```
+
+Both options add up across calls, and child loggers (`WithLabels`) redact the same way.
+
 ### Performance Tuning
 
 ```go

@@ -5,10 +5,26 @@ on:
     branches: [main, develop]
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26.11" # a patched Go: govulncheck fails on known standard library vulnerabilities
   COVERAGE_THRESHOLD: 90
 
 jobs:
+  commits:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the PR's commits, not only the merge ref
+
+      # Every commit of the PR reaches main (PRs are merged with a merge
+      # commit), and semantic-release computes the version from their messages
+      - name: Check commit messages
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: scripts/conventional-commit.sh --range "$BASE_SHA" "$HEAD_SHA"
+
   test:
     name: Coverage
     runs-on: ubuntu-latest

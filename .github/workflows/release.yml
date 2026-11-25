@@ -1,0 +1,38 @@
+name: Release
+
+# On every push to main (a release/* or hotfix/* PR merged with a merge commit),
+# semantic-release reads the conventional commits since the last v* tag and, if
+# any of them is releasable, creates the next tag and its GitHub Release
+# (.releaserc.json: feat -> minor; fix, perf, refactor, revert, build -> patch;
+# a breaking change -> major; docs, test, ci, chore -> no release).
+#
+# The tag is the Go module version: `go get github.com/edaniel30/loki-logger-go@vX.Y.Z`.
+
+on:
+  push:
+    branches: [main]
+
+# One release at a time: two merges in a row must not compute the same version
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Semantic release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag and the GitHub Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # every commit and tag since the last release
+          persist-credentials: false
+
+      - name: Run semantic-release
+        uses: cycjimmy/semantic-release-action@v4
+        with:
+          semantic_version: 24
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
