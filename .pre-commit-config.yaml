@@ -1,3 +1,7 @@
+# `pre-commit install` installs both hook types: the checks below, and the
+# conventional-commit check on the commit message
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/TekWizely/pre-commit-golang
     rev: v1.0.0-rc.1
@@ -21,3 +25,8 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+      - id: conventional-commit
+        name: Conventional commit message
+        entry: scripts/conventional-commit.sh
+        language: script
+        stages: [commit-msg]
