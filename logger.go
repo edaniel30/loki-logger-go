@@ -114,6 +114,9 @@ func (l *Logger) log(ctx context.Context, level types.Level, message string, fie
 		}
 	}
 
+	// Before redaction: the redactor walks values by reflection and would
+	// turn an error pointer into its struct, losing the message
+	fields = encodableFields(fields)
 	fields = l.redactor.fields(fields)
 
 	// Automatically add caller information (file and line) if not already present

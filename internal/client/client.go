@@ -80,10 +80,13 @@ func (c *Client) buildPayload(entries []*types.Entry) ([]byte, error) {
 			streams[labelKey] = s
 		}
 
-		// Format entry as JSON for the log line
+		// Format entry as JSON for the log line. A line that cannot be
+		// encoded keeps its message and says why its fields were dropped:
+		// one bad entry must not fail the whole batch, and every other line
+		// in it with it
 		logLine, err := c.formatLogLine(entry)
 		if err != nil {
-			return nil, err
+			logLine = fallbackLogLine(entry.Message, err)
 		}
 
 		// Loki expects [timestamp_nanoseconds, log_line]
@@ -128,6 +131,16 @@ func (c *Client) formatLogLine(entry *types.Entry) (string, error) {
 	}
 
 	return line, nil
+}
+
+// fallbackLogLine is the line sent when an entry's fields cannot be encoded:
+// its message and the encoding error, both plain strings.
+func fallbackLogLine(message string, err error) string {
+	line, _ := json.Marshal(map[string]string{
+		"message":   message,
+		"log_error": "fields dropped, they could not be encoded: " + err.Error(),
+	})
+	return string(line)
 }
 
 // labelsToKey creates a unique key from labels for grouping.
