@@ -231,3 +231,32 @@ func TestClient_sendWithRetry(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed after 2 retries")
 }
+
+// One entry whose fields cannot be encoded used to fail the whole batch, and
+// every other line in it was lost: now it is sent with its message and why
+// its fields were dropped, and the rest go as they are
+func TestClient_buildPayload_KeepsTheBatchWhenOneLineCannotBeEncoded(t *testing.T) {
+	c := NewClient("http://localhost:3100", "", "", 10*time.Second, 3)
+	labels := map[string]string{"app": "test"}
+	good := &types.Entry{Level: types.LevelInfo, Message: "Inbox email received", Fields: map[string]any{"key": "inbox/a.eml"}, Labels: labels, Timestamp: time.Now()}
+	bad := &types.Entry{Level: types.LevelError, Message: "Failed to process inbox email", Fields: map[string]any{"handler": func() {}}, Labels: labels, Timestamp: time.Now()}
+
+	payload, err := c.buildPayload([]*types.Entry{good, bad})
+	require.NoError(t, err)
+
+	var req struct {
+		Streams []struct {
+			Values [][]string `json:"values"`
+		} `json:"streams"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &req))
+	require.Len(t, req.Streams, 1)
+	require.Len(t, req.Streams[0].Values, 2)
+
+	var first, second map[string]any
+	require.NoError(t, json.Unmarshal([]byte(req.Streams[0].Values[0][1]), &first))
+	require.NoError(t, json.Unmarshal([]byte(req.Streams[0].Values[1][1]), &second))
+	assert.Equal(t, "inbox/a.eml", first["key"])
+	assert.Equal(t, "Failed to process inbox email", second["message"])
+	assert.Contains(t, second["log_error"], "could not be encoded")
+}
