@@ -101,7 +101,13 @@ func (r *redactor) value(v any) any {
 		}
 		return r.value(rv.Elem().Interface())
 	case reflect.String:
-		return r.jsonString(v.(string))
+		// A named string type (type Protocol string) is a String kind but
+		// not a string: v.(string) would panic. Those are enums, never a
+		// JSON document, and keep their value
+		if s, ok := v.(string); ok {
+			return r.jsonString(s)
+		}
+		return v
 	default:
 		return v
 	}
@@ -159,11 +165,12 @@ func (r *redactor) slice(rv reflect.Value) any {
 // other structured value (e.g. a nested map) is walked normally instead of
 // being blanket-masked, so sensitive keys further down are still caught.
 func (r *redactor) leaf(v any) any {
-	if s, ok := v.(string); ok {
-		return maskString(s)
+	rv := reflect.ValueOf(v)
+	// Any string kind, named string types included (type Token string)
+	if rv.Kind() == reflect.String {
+		return maskString(rv.String())
 	}
 
-	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
 		out := make([]any, rv.Len())
 		for i := 0; i < rv.Len(); i++ {

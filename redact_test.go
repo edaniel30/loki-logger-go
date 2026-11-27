@@ -243,3 +243,28 @@ func TestNew_RedactionOptions(t *testing.T) {
 	child := logger.WithLabels(map[string]string{"component": "auth"})
 	assert.Same(t, logger.redactor, child.redactor, "loggers with extra labels redact the same way")
 }
+
+type protocol string
+
+type token string
+
+// Named string types (enums) are a String kind but not a string: the walk
+// must keep them without panicking, nested in a map as at the top level.
+func TestRedactFields_NamedStringType(t *testing.T) {
+	fields := map[string]any{
+		"port":  map[string]any{"protocol": protocol("tcp"), "number": 8080},
+		"proto": protocol("udp"),
+	}
+
+	assert.NotPanics(t, func() {
+		out := defaultRedactor.fields(fields)
+		assert.Equal(t, protocol("udp"), out["proto"])
+		assert.Equal(t, map[string]any{"protocol": protocol("tcp"), "number": 8080}, out["port"])
+	})
+}
+
+// A named string type under a sensitive key is masked like a string.
+func TestRedactFields_NamedStringUnderSensitiveKey(t *testing.T) {
+	out := defaultRedactor.fields(map[string]any{"token": token("abcdef")})
+	assert.Equal(t, "a***f", out["token"])
+}
